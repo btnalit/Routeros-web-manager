@@ -1,0 +1,32 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0;
+  text-align: left;
+}
+
+.ant-layout-sider {
+  background: #001529 !important;
+}
+
+.ant-layout-header {
+  background: #fff !important;
+  padding: 0 24px;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+}
+
+.ant-layout-content {
+  background: #f0f2f5;
+}
+
+.logo {
+  height: 32px;
+  margin: 16px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: bold;
+}
