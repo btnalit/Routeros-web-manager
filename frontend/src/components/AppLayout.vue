@@ -86,7 +86,26 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => {
 .app-aside {
   background-color: #304156;
   transition: width 0.3s ease;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* 自定义侧边栏滚动条样式 */
+.app-aside::-webkit-scrollbar {
+  width: 6px;
+}
+
+.app-aside::-webkit-scrollbar-track {
+  background: #304156;
+}
+
+.app-aside::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.app-aside::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .main-container {
