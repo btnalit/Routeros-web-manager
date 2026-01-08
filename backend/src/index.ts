@@ -1,55 +1,76 @@
-import express from 'express';
+import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
+import dotenv from 'dotenv';
+import path from 'path';
 import { logger } from './utils/logger';
-import { errorHandler } from './middleware/errorHandler';
-import { notFoundHandler } from './middleware/notFoundHandler';
+import { connectionRoutes, interfaceRoutes, ipRoutes, systemRoutes } from './routes';
 
-const app = express();
-const server = createServer(app);
-const wss = new WebSocketServer({ server });
+// Load environment variables
+dotenv.config();
 
-const PORT = process.env.PORT || 3001;
+const app: Application = express();
+const PORT = process.env.PORT || 3099;
+const isProduction = process.env.NODE_ENV === 'production';
 
-// 中间件配置
-app.use(helmet());
+// Middleware
 app.use(cors());
-app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// 健康检查端点
-app.get('/health', (req, res) => {
+// Request logging middleware
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  logger.info(`${req.method} ${req.path}`);
+  next();
+});
+
+// 设置 API 路由响应字符集为 UTF-8（仅对 /api 路由生效，不影响静态文件）
+app.use('/api', (_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  next();
+});
+
+// Health check endpoint
+app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// API路由占位符
-app.get('/api', (req, res) => {
-  res.json({ message: 'RouterOS Web Manager API', version: '1.0.0' });
-});
+// API Routes
+app.use('/api/connection', connectionRoutes);
+app.use('/api/interfaces', interfaceRoutes);
+app.use('/api/ip', ipRoutes);
+app.use('/api/system', systemRoutes);
 
-// WebSocket连接处理
-wss.on('connection', (ws) => {
-  logger.info('WebSocket client connected');
-  
-  ws.on('message', (message) => {
-    logger.info(`Received message: ${message.toString()}`);
-  });
-  
-  ws.on('close', () => {
-    logger.info('WebSocket client disconnected');
+// Error handling middleware
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  logger.error('Unhandled error:', err);
+  res.status(500).json({
+    error: err.message || 'Internal Server Error'
   });
 });
 
-// 错误处理中间件
-app.use(notFoundHandler);
-app.use(errorHandler);
+// Serve static files in production
+if (isProduction) {
+  const publicPath = path.join(__dirname, '..', 'public');
+  app.use(express.static(publicPath));
+  
+  // Handle SPA routing - serve index.html for all non-API routes
+  app.get('*', (req: Request, res: Response) => {
+    // Skip API routes
+    if (req.path.startsWith('/api/')) {
+      res.status(404).json({ error: 'Not Found' });
+      return;
+    }
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+} else {
+  // 404 handler for development
+  app.use((_req: Request, res: Response) => {
+    res.status(404).json({ error: 'Not Found' });
+  });
+}
 
-// 启动服务器
-server.listen(PORT, () => {
+// Start server
+app.listen(PORT, () => {
   logger.info(`Server is running on port ${PORT}`);
 });
 

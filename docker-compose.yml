@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  routeros-web-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: routeros-web-manager
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:3099"
+    environment:
+      - NODE_ENV=production
+      - PORT=3099
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      # Persist connection configuration
+      - routeros-data:/app/backend/data
+      # Persist logs
+      - routeros-logs:/app/backend/logs
+    networks:
+      - routeros-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3099/api/connection/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Nginx reverse proxy with SSL support
+  nginx:
+    image: nginx:alpine
+    container_name: routeros-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - routeros-web-manager
+    networks:
+      - routeros-network
+    profiles:
+      - with-nginx
+
+volumes:
+  routeros-data:
+    name: routeros-web-manager-data
+  routeros-logs:
+    name: routeros-web-manager-logs
+
+networks:
+  routeros-network:
+    name: routeros-network
+    driver: bridge

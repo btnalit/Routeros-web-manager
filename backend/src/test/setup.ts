@@ -1,22 +1,16 @@
-// Jest setup file for backend tests
-import { logger } from '../utils/logger';
+/**
+ * Jest Test Setup
+ * 测试环境配置
+ */
 
-// Suppress logs during testing
-logger.silent = true;
+// 设置测试超时时间
+jest.setTimeout(10000);
 
-// Global test setup
+// 清理控制台输出
 beforeAll(() => {
-  // Setup test database or other resources
+  // 可以在这里添加全局测试设置
 });
 
 afterAll(() => {
-  // Cleanup test resources
-});
-
-beforeEach(() => {
-  // Reset state before each test
-});
-
-afterEach(() => {
-  // Cleanup after each test
+  // 可以在这里添加全局清理逻辑
 });

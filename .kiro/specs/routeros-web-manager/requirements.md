@@ -1,105 +1,110 @@
-# 需求文档
+# Requirements Document
 
-## 介绍
+## Introduction
 
-RouterOS中文Web管理界面是一个定制化的Web应用程序，旨在简化RouterOS的网络配置管理。该系统提供直观的中文界面，支持PPPoE、PPTP、L2TP接口配置，以及mihomo容器的一键部署和代理节点管理功能。
+RouterOS Web Manager 是一个轻量级的 Web 管理界面，通过 RouterOS API 实现对 MikroTik 路由器的远程管理。系统支持 Docker 部署，专注于三个核心模块的管理：Interface（接口）、IP（网络地址）和 System（系统）。
 
-## 术语表
+## Glossary
 
-- **RouterOS_Manager**: 主要的Web管理系统
-- **VPN_Interface**: VPN接口配置模块（PPPoE、PPTP、L2TP）
-- **Mihomo_Container**: mihomo代理容器管理模块
-- **Proxy_Node**: 代理节点配置实体
-- **Traffic_Rule**: 流量引流规则配置
-- **Chain_Proxy**: 链式前置代理节点配置
+- **RouterOS_API**: MikroTik RouterOS 提供的 REST API 接口，用于远程管理路由器
+- **Web_Manager**: 本系统的 Web 管理界面
+- **Interface_Module**: RouterOS 的网络接口管理模块，包含以太网口、VLAN、桥接等
+- **IP_Module**: RouterOS 的 IP 地址和路由管理模块，包含地址分配和路由表配置
+- **System_Module**: RouterOS 的系统管理模块，包含计划任务（Scheduler）和脚本（Script）
+- **Scheduler**: RouterOS 的计划任务功能，用于定时执行脚本
+- **Script**: RouterOS 的脚本功能，用于存储和执行自动化命令
+- **Route**: RouterOS 的路由配置，定义数据包的转发路径
+- **Docker_Container**: 用于部署本系统的容器化环境
+- **Vue_3**: 前端 JavaScript 框架，用于构建用户界面
+- **Element_Plus**: 基于 Vue 3 的 UI 组件库
 
-## 需求
+## Requirements
 
-### 需求 1: VPN接口配置管理
+### Requirement 1: RouterOS 连接管理
 
-**用户故事:** 作为网络管理员，我希望能够通过Web界面直接配置PPPoE、PPTP、L2TP接口，以便快速部署和管理VPN连接。
+**User Story:** 作为管理员，我希望能够配置和管理 RouterOS 设备的连接信息，以便系统能够与路由器通信。
 
-#### 验收标准
+#### Acceptance Criteria
 
-1. 当用户访问VPN接口配置页面时，系统应显示PPPoE、PPTP、L2TP三种接口类型的配置选项
-2. 当用户选择PPPoE接口类型时，系统应提供用户名、密码、服务名称等必要配置字段
-3. 当用户选择PPTP接口类型时，系统应提供服务器地址、用户名、密码、加密选项等配置字段
-4. 当用户选择L2TP接口类型时，系统应提供服务器地址、用户名、密码、IPSec预共享密钥等配置字段
-5. 当用户提交VPN接口配置时，系统应验证配置参数的有效性并应用到RouterOS
+1. WHEN 管理员首次访问系统 THEN Web_Manager SHALL 显示 RouterOS 连接配置界面
+2. WHEN 管理员输入 RouterOS 地址、端口、用户名和密码 THEN Web_Manager SHALL 验证连接并保存配置
+3. WHEN 连接验证失败 THEN Web_Manager SHALL 显示具体的错误信息
+4. WHEN 连接配置成功保存 THEN Web_Manager SHALL 跳转到主管理界面
+5. IF RouterOS 连接断开 THEN Web_Manager SHALL 显示连接状态警告并提供重连选项
 
-### 需求 2: Mihomo容器一键部署
+### Requirement 2: Interface 模块管理
 
-**用户故事:** 作为系统管理员，我希望能够一键部署mihomo容器，以便快速启用代理服务功能。
+**User Story:** 作为管理员，我希望能够查看和管理 RouterOS 的网络接口，以便配置网络连接。
 
-#### 验收标准
+#### Acceptance Criteria
 
-1. 当用户点击mihomo容器部署按钮时，系统应自动下载并部署mihomo容器
-2. 当容器部署完成时，系统应显示部署状态和容器运行信息
-3. 当容器部署失败时，系统应显示详细的错误信息和建议解决方案
-4. 当容器成功运行时，系统应提供容器管理功能（启动、停止、重启、删除）
+1. WHEN 管理员访问 Interface 模块 THEN Web_Manager SHALL 显示所有网络接口列表
+2. WHEN 显示接口列表 THEN Web_Manager SHALL 展示接口名称、类型、MAC地址、状态和备注信息
+3. WHEN 管理员点击某个接口 THEN Web_Manager SHALL 显示该接口的详细配置信息
+4. WHEN 管理员修改接口配置并提交 THEN Web_Manager SHALL 通过 RouterOS_API 更新配置
+5. WHEN 管理员启用或禁用接口 THEN Web_Manager SHALL 立即更新接口状态
+6. IF 接口配置更新失败 THEN Web_Manager SHALL 显示错误信息并保持原有配置
 
-### 需求 3: 代理节点配置管理
+### Requirement 3: IP 模块管理
 
-**用户故事:** 作为网络管理员，我希望能够通过Web界面配置各种协议的代理节点，以便灵活管理代理服务。
+**User Story:** 作为管理员，我希望能够管理 RouterOS 的 IP 地址和路由配置，以便设置网络寻址和路由策略。
 
-#### 验收标准
+#### Acceptance Criteria
 
-1. 当用户访问代理节点配置页面时，系统应显示支持的协议列表（VLESS、VMess、Trojan、gRPC、AnyTLS、SS、SOCKS5）
-2. 当用户选择VLESS协议时，系统应提供服务器地址、端口、UUID、加密方式、传输协议等配置字段
-3. 当用户选择VMess协议时，系统应提供服务器地址、端口、UUID、alterId、加密方式、网络类型等配置字段
-4. 当用户选择Trojan协议时，系统应提供服务器地址、端口、密码、SNI、跳过证书验证等配置字段
-5. 当用户选择gRPC协议时，系统应提供服务器地址、端口、服务名称、TLS配置等字段
-6. 当用户选择AnyTLS协议时，系统应提供服务器地址、端口、TLS配置、证书验证等字段
-7. 当用户选择SS协议时，系统应提供服务器地址、端口、密码、加密方式等配置字段
-8. 当用户选择SOCKS5协议时，系统应提供服务器地址、端口、用户名、密码等配置字段
-9. 当用户配置代理节点时，系统应支持选择链式前置代理节点
-10. 当用户保存代理节点配置时，系统应验证配置的完整性和有效性
+1. WHEN 管理员访问 IP 模块 THEN Web_Manager SHALL 显示 IP 地址列表和路由列表的切换视图
+2. WHEN 显示 IP 地址列表 THEN Web_Manager SHALL 展示地址、接口、网络和状态信息
+3. WHEN 管理员添加新 IP 地址 THEN Web_Manager SHALL 验证地址格式并通过 RouterOS_API 创建
+4. WHEN 管理员修改 IP 地址配置 THEN Web_Manager SHALL 通过 RouterOS_API 更新配置
+5. WHEN 管理员删除 IP 地址 THEN Web_Manager SHALL 确认后通过 RouterOS_API 删除
+6. WHEN 显示路由列表 THEN Web_Manager SHALL 展示目标地址、网关、接口、距离和状态信息
+7. WHEN 管理员添加新路由 THEN Web_Manager SHALL 验证路由参数并通过 RouterOS_API 创建
+8. WHEN 管理员修改路由配置 THEN Web_Manager SHALL 通过 RouterOS_API 更新配置
+9. WHEN 管理员删除路由 THEN Web_Manager SHALL 确认后通过 RouterOS_API 删除
+10. IF IP 地址或路由格式无效 THEN Web_Manager SHALL 显示格式错误提示
+11. IF IP 操作失败 THEN Web_Manager SHALL 显示 RouterOS 返回的错误信息
 
-### 需求 4: 流量引流规则配置
+### Requirement 4: System 模块管理
 
-**用户故事:** 作为网络管理员，我希望能够配置流量引流规则，以便将特定内网IP的流量引导到指定的VPN出口。
+**User Story:** 作为管理员，我希望能够管理 RouterOS 的计划任务和脚本，以便实现自动化运维。
 
-#### 验收标准
+#### Acceptance Criteria
 
-1. 当用户访问流量引流规则配置页面时，系统应显示当前所有配置的规则列表
-2. 当用户添加新规则时，系统应提供源IP地址、目标地址、VPN出口选择等配置选项
-3. 当用户选择单个内网IP时，系统应提供IP地址输入框和子网掩码选择
-4. 当用户选择VPN出口时，系统应显示所有可用的VPN接口列表
-5. 当用户保存引流规则时，系统应验证IP地址格式和规则冲突
-6. 当规则应用时，系统应将配置同步到RouterOS的路由表和防火墙规则
+1. WHEN 管理员访问 System 模块 THEN Web_Manager SHALL 显示 Scheduler 和 Script 的切换视图
+2. WHEN 显示 Scheduler 列表 THEN Web_Manager SHALL 展示任务名称、执行间隔、下次运行时间、状态和关联脚本
+3. WHEN 管理员添加新 Scheduler THEN Web_Manager SHALL 验证参数并通过 RouterOS_API 创建
+4. WHEN 管理员修改 Scheduler 配置 THEN Web_Manager SHALL 通过 RouterOS_API 更新配置
+5. WHEN 管理员删除 Scheduler THEN Web_Manager SHALL 确认后通过 RouterOS_API 删除
+6. WHEN 管理员启用或禁用 Scheduler THEN Web_Manager SHALL 立即更新任务状态
+7. WHEN 显示 Script 列表 THEN Web_Manager SHALL 展示脚本名称、所有者、最后运行时间和运行次数
+8. WHEN 管理员添加新 Script THEN Web_Manager SHALL 提供代码编辑器并通过 RouterOS_API 创建
+9. WHEN 管理员修改 Script 内容 THEN Web_Manager SHALL 通过 RouterOS_API 更新脚本
+10. WHEN 管理员删除 Script THEN Web_Manager SHALL 确认后通过 RouterOS_API 删除
+11. WHEN 管理员手动运行 Script THEN Web_Manager SHALL 通过 RouterOS_API 执行脚本
+12. IF Scheduler 或 Script 操作失败 THEN Web_Manager SHALL 显示 RouterOS 返回的错误信息
 
-### 需求 5: 系统配置持久化
+### Requirement 5: Docker 部署支持
 
-**用户故事:** 作为系统管理员，我希望所有配置能够持久化保存，以便系统重启后配置不丢失。
+**User Story:** 作为运维人员，我希望能够通过 Docker 快速部署系统，以便简化安装和维护。
 
-#### 验收标准
+#### Acceptance Criteria
 
-1. 当用户保存任何配置时，系统应将配置数据持久化到本地存储
-2. 当系统重启时，系统应自动加载之前保存的所有配置
-3. 当配置文件损坏时，系统应提供配置恢复和备份功能
-4. 当用户导出配置时，系统应生成包含所有配置的JSON文件
-5. 当用户导入配置时，系统应验证配置文件格式并应用有效配置
+1. THE Web_Manager SHALL 提供 Dockerfile 用于构建容器镜像
+2. THE Web_Manager SHALL 提供 docker-compose.yml 用于一键部署
+3. WHEN 容器启动 THEN Web_Manager SHALL 在指定端口提供 Web 服务
+4. THE Web_Manager SHALL 支持通过环境变量配置端口和其他参数
+5. WHEN 容器重启 THEN Web_Manager SHALL 保持之前的连接配置
 
-### 需求 6: 中文用户界面
+### Requirement 6: 用户界面体验
 
-**用户故事:** 作为中文用户，我希望整个Web界面都使用中文，以便更好地理解和操作系统功能。
+**User Story:** 作为管理员，我希望界面简洁易用，以便高效完成管理任务。
 
-#### 验收标准
+#### Acceptance Criteria
 
-1. 当用户访问任何页面时，系统应显示完整的中文界面
-2. 当系统显示错误信息时，系统应提供中文的错误描述和解决建议
-3. 当用户查看帮助文档时，系统应提供中文的操作指南和说明
-4. 当系统显示状态信息时，系统应使用中文描述连接状态和运行状态
-5. 当用户进行配置操作时，系统应提供中文的字段标签和提示信息
-
-### 需求 7: 实时状态监控
-
-**用户故事:** 作为网络管理员，我希望能够实时查看VPN连接状态和代理服务状态，以便及时发现和解决问题。
-
-#### 验收标准
-
-1. 当用户访问状态监控页面时，系统应显示所有VPN接口的连接状态
-2. 当VPN连接状态发生变化时，系统应实时更新显示状态
-3. 当mihomo容器运行时，系统应显示容器的运行状态和资源使用情况
-4. 当代理节点连接测试时，系统应显示连接延迟和可用性状态
-5. 当流量引流规则生效时，系统应显示规则匹配的流量统计信息
+1. THE Web_Manager SHALL 基于 Vue 3 和 Element Plus 框架开发前端界面
+2. THE Web_Manager SHALL 提供响应式布局，支持桌面和移动设备访问
+3. WHEN 执行操作 THEN Web_Manager SHALL 显示加载状态指示
+4. WHEN 操作成功 THEN Web_Manager SHALL 显示成功提示
+5. WHEN 操作失败 THEN Web_Manager SHALL 显示清晰的错误信息
+6. THE Web_Manager SHALL 提供侧边导航菜单快速切换各模块
+7. THE Web_Manager SHALL 使用表格组件展示列表数据，支持排序和筛选
+8. THE Web_Manager SHALL 使用对话框组件进行配置编辑

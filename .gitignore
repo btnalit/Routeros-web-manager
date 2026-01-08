@@ -82,6 +82,7 @@ temp/
 # Editor directories and files
 .vscode/
 .idea/
+.kiro/
 *.swp
 *.swo
 *~
@@ -103,3 +104,8 @@ Thumbs.db
 # Configuration files with sensitive data
 config/local.json
 config/production.json
+
+
+# SSL Certificates (keep .gitkeep)
+certs/*
+!certs/.gitkeep
