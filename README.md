@@ -80,7 +80,22 @@ cd frontend && npm run build
 
 ## Docker 部署
 
-### 快速部署（推荐）
+### 使用预构建镜像（推荐）
+
+```bash
+# 拉取镜像
+docker pull ghcr.io/btnalit/routeros-web-manager:latest
+
+# 运行容器
+docker run -d \
+  --name routeros-web-manager \
+  -p 8080:3099 \
+  -v routeros-data:/app/backend/data \
+  -v routeros-logs:/app/backend/logs \
+  ghcr.io/btnalit/routeros-web-manager:latest
+```
+
+### 使用 Docker Compose
 
 ```bash
 # 简单部署（单容器）
