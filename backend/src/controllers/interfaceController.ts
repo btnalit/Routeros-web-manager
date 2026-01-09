@@ -5,12 +5,13 @@
 
 import { Request, Response } from 'express';
 import { routerosClient } from '../services/routerosClient';
-import { NetworkInterface } from '../types';
+import { NetworkInterface, VethInterface } from '../types';
 import { logger } from '../utils/logger';
 
 const INTERFACE_PATH = '/interface';
 const L2TP_CLIENT_PATH = '/interface/l2tp-client';
 const PPPOE_CLIENT_PATH = '/interface/pppoe-client';
+const VETH_PATH = '/interface/veth';
 
 /**
  * 获取所有网络接口
@@ -574,6 +575,187 @@ export async function deletePppoeClient(req: Request, res: Response): Promise<vo
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : '删除 PPPoE 客户端失败',
+    });
+  }
+}
+
+
+// ==================== VETH Interface ====================
+
+/**
+ * 获取所有 VETH 接口
+ * GET /api/interfaces/veth
+ */
+export async function getVethInterfaces(_req: Request, res: Response): Promise<void> {
+  try {
+    const interfaces = await routerosClient.print<VethInterface>(VETH_PATH);
+    const data = Array.isArray(interfaces) ? interfaces : [];
+    
+    logger.info(`Returning ${data.length} VETH interfaces`);
+    
+    res.json({
+      success: true,
+      data: data,
+    });
+  } catch (error) {
+    logger.error('Failed to get VETH interfaces:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '获取 VETH 接口列表失败',
+    });
+  }
+}
+
+/**
+ * 获取单个 VETH 接口
+ * GET /api/interfaces/veth/:id
+ */
+export async function getVethInterfaceById(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      res.status(400).json({
+        success: false,
+        error: '缺少接口 ID',
+      });
+      return;
+    }
+
+    const vethInterface = await routerosClient.getById<VethInterface>(VETH_PATH, id);
+    
+    if (!vethInterface) {
+      res.status(404).json({
+        success: false,
+        error: 'VETH 接口不存在',
+      });
+      return;
+    }
+    
+    res.json({
+      success: true,
+      data: vethInterface,
+    });
+  } catch (error) {
+    logger.error('Failed to get VETH interface:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '获取 VETH 接口详情失败',
+    });
+  }
+}
+
+/**
+ * 创建 VETH 接口
+ * POST /api/interfaces/veth
+ */
+export async function createVethInterface(req: Request, res: Response): Promise<void> {
+  try {
+    const data = req.body;
+    
+    if (!data || !data.name) {
+      res.status(400).json({
+        success: false,
+        error: '缺少必要参数：name',
+      });
+      return;
+    }
+
+    const newInterface = await routerosClient.add<VethInterface>(
+      VETH_PATH,
+      data
+    );
+    
+    logger.info(`Created VETH interface: ${data.name}`);
+    
+    res.json({
+      success: true,
+      data: newInterface,
+      message: 'VETH 接口已创建',
+    });
+  } catch (error) {
+    logger.error('Failed to create VETH interface:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '创建 VETH 接口失败',
+    });
+  }
+}
+
+/**
+ * 更新 VETH 接口配置
+ * PATCH /api/interfaces/veth/:id
+ */
+export async function updateVethInterface(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    if (!id) {
+      res.status(400).json({
+        success: false,
+        error: '缺少接口 ID',
+      });
+      return;
+    }
+
+    if (!updateData || Object.keys(updateData).length === 0) {
+      res.status(400).json({
+        success: false,
+        error: '缺少更新数据',
+      });
+      return;
+    }
+
+    const updatedInterface = await routerosClient.set<VethInterface>(
+      VETH_PATH,
+      id,
+      updateData
+    );
+    
+    res.json({
+      success: true,
+      data: updatedInterface,
+      message: 'VETH 接口配置已更新',
+    });
+  } catch (error) {
+    logger.error('Failed to update VETH interface:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '更新 VETH 接口配置失败',
+    });
+  }
+}
+
+/**
+ * 删除 VETH 接口
+ * DELETE /api/interfaces/veth/:id
+ */
+export async function deleteVethInterface(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      res.status(400).json({
+        success: false,
+        error: '缺少接口 ID',
+      });
+      return;
+    }
+
+    await routerosClient.remove(VETH_PATH, id);
+    
+    logger.info(`Deleted VETH interface: ${id}`);
+    
+    res.json({
+      success: true,
+      message: 'VETH 接口已删除',
+    });
+  } catch (error) {
+    logger.error('Failed to delete VETH interface:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '删除 VETH 接口失败',
     });
   }
 }

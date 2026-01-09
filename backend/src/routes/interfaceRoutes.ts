@@ -20,9 +20,30 @@ import {
   createPppoeClient,
   updatePppoeClient,
   deletePppoeClient,
+  getVethInterfaces,
+  getVethInterfaceById,
+  createVethInterface,
+  updateVethInterface,
+  deleteVethInterface,
 } from '../controllers/interfaceController';
 
 const router = Router();
+
+// VETH routes (must be before /:id to avoid conflicts)
+// GET /api/interfaces/veth - 获取所有 VETH 接口
+router.get('/veth', getVethInterfaces);
+
+// POST /api/interfaces/veth - 创建 VETH 接口
+router.post('/veth', createVethInterface);
+
+// GET /api/interfaces/veth/:id - 获取单个 VETH 接口
+router.get('/veth/:id', getVethInterfaceById);
+
+// PATCH /api/interfaces/veth/:id - 更新 VETH 接口配置
+router.patch('/veth/:id', updateVethInterface);
+
+// DELETE /api/interfaces/veth/:id - 删除 VETH 接口
+router.delete('/veth/:id', deleteVethInterface);
 
 // L2TP Client routes (must be before /:id to avoid conflicts)
 // GET /api/interfaces/l2tp-client - 获取所有 L2TP 客户端

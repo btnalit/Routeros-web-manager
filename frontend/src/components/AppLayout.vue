@@ -36,18 +36,55 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { Fold, Expand } from '@element-plus/icons-vue'
 import SideMenu from './SideMenu.vue'
 import ConnectionStatus from './ConnectionStatus.vue'
+import { connectionApi } from '@/api'
+import { useConnectionStore } from '@/stores/connection'
 
 const menuCollapsed = ref(false)
 const route = useRoute()
+const connectionStore = useConnectionStore()
+
+let statusCheckInterval: ReturnType<typeof setInterval> | null = null
 
 const toggleMenu = () => {
   menuCollapsed.value = !menuCollapsed.value
 }
+
+// Periodic connection status check
+const checkConnectionStatus = async () => {
+  try {
+    const response = await connectionApi.getStatus()
+    const result = response.data
+    if (result.success && result.data) {
+      connectionStore.setConnected(result.data.connected)
+      if (result.data.connected && result.data.config) {
+        connectionStore.setConfig(result.data.config)
+      }
+    } else {
+      connectionStore.setConnected(false)
+    }
+  } catch {
+    // Don't set disconnected on network errors - might be temporary
+  }
+}
+
+onMounted(() => {
+  // Initial check
+  checkConnectionStatus()
+  // Check every 30 seconds
+  statusCheckInterval = setInterval(checkConnectionStatus, 30000)
+})
+
+onUnmounted(() => {
+  if (statusCheckInterval) {
+    clearInterval(statusCheckInterval)
+    statusCheckInterval = null
+  }
+})
 
 interface BreadcrumbItem {
   path: string

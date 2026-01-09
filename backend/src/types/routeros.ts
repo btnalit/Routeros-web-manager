@@ -32,6 +32,22 @@ export interface NetworkInterface {
   comment?: string;        // 备注
 }
 
+/**
+ * VETH 虚拟以太网接口数据模型
+ */
+export interface VethInterface {
+  '.id': string;           // RouterOS 内部 ID
+  name: string;            // 接口名称
+  'mac-address'?: string;  // MAC 地址
+  address?: string;        // IP 地址 (CIDR 格式)
+  gateway?: string;        // IPv4 网关
+  gateway6?: string;       // IPv6 网关
+  mtu?: number;            // MTU 值
+  disabled: boolean;       // 是否禁用
+  running: boolean;        // 是否运行中
+  comment?: string;        // 备注
+}
+
 // ==================== IP 模块 ====================
 
 /**

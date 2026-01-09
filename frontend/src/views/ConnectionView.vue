@@ -259,8 +259,8 @@ const handleSaveAndConnect = async () => {
       connectionStore.setConnected(true)
       connectionStore.setConfig({ ...form })
       
-      // Navigate to interfaces page after successful connection
-      router.push('/interfaces')
+      // Navigate to dashboard page after successful connection
+      router.push('/dashboard')
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '操作失败'

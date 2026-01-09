@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useConnectionStore } from '@/stores/connection'
 
 const api = axios.create({
   baseURL: '/api',
@@ -10,11 +11,42 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Response interceptor
+// Response interceptor - update connection status based on API responses
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // If API call succeeds and returns data, connection is working
+    // Only update for non-connection endpoints to avoid circular updates
+    const url = response.config.url || ''
+    if (!url.includes('/connection/')) {
+      try {
+        const connectionStore = useConnectionStore()
+        // If we get a successful response from RouterOS-related endpoints, we're connected
+        if (response.data?.success !== false) {
+          connectionStore.setConnected(true)
+        }
+      } catch {
+        // Store might not be initialized yet, ignore
+      }
+    }
+    return response
+  },
   (error) => {
+    // Check if error indicates connection issue
     const message = error.response?.data?.error || error.message || 'Request failed'
+    const lowerMessage = message.toLowerCase()
+    
+    // If error indicates connection is lost, update store
+    if (lowerMessage.includes('not connected') || 
+        lowerMessage.includes('连接已断开') ||
+        lowerMessage.includes('connection') && lowerMessage.includes('closed')) {
+      try {
+        const connectionStore = useConnectionStore()
+        connectionStore.setConnected(false)
+      } catch {
+        // Store might not be initialized yet, ignore
+      }
+    }
+    
     return Promise.reject(new Error(message))
   }
 )
@@ -56,6 +88,15 @@ export const interfaceApi = {
   createPppoeClient: (data: object) => api.post('/interfaces/pppoe-client', data),
   updatePppoeClient: (id: string, data: object) => api.patch(`/interfaces/pppoe-client/${id}`, data),
   deletePppoeClient: (id: string) => api.delete(`/interfaces/pppoe-client/${id}`)
+}
+
+// VETH Interface API
+export const vethApi = {
+  getAll: () => api.get('/interfaces/veth'),
+  getById: (id: string) => api.get(`/interfaces/veth/${id}`),
+  create: (data: object) => api.post('/interfaces/veth', data),
+  update: (id: string, data: object) => api.patch(`/interfaces/veth/${id}`, data),
+  delete: (id: string) => api.delete(`/interfaces/veth/${id}`)
 }
 
 // IP API
@@ -125,4 +166,51 @@ export const systemApi = {
   updateScript: (id: string, data: object) => api.patch(`/system/scripts/${id}`, data),
   deleteScript: (id: string) => api.delete(`/system/scripts/${id}`),
   runScript: (id: string) => api.post(`/system/scripts/${id}/run`)
+}
+
+// Dashboard API
+export const dashboardApi = {
+  getResource: () => api.get('/dashboard/resource')
+}
+
+// Firewall API
+export const firewallApi = {
+  // Filter Rules (只读)
+  getFilters: () => api.get('/firewall/filter'),
+  getFilterById: (id: string) => api.get(`/firewall/filter/${id}`),
+  // NAT Rules (完整 CRUD)
+  getNats: () => api.get('/firewall/nat'),
+  getNatById: (id: string) => api.get(`/firewall/nat/${id}`),
+  createNat: (data: object) => api.post('/firewall/nat', data),
+  updateNat: (id: string, data: object) => api.patch(`/firewall/nat/${id}`, data),
+  deleteNat: (id: string) => api.delete(`/firewall/nat/${id}`),
+  enableNat: (id: string) => api.post(`/firewall/nat/${id}/enable`),
+  disableNat: (id: string) => api.post(`/firewall/nat/${id}/disable`),
+  // Mangle Rules (只读)
+  getMangles: () => api.get('/firewall/mangle'),
+  getMangleById: (id: string) => api.get(`/firewall/mangle/${id}`),
+  // Address List (完整 CRUD)
+  getAddressList: () => api.get('/firewall/address-list'),
+  createAddressEntry: (data: object) => api.post('/firewall/address-list', data),
+  updateAddressEntry: (id: string, data: object) => api.patch(`/firewall/address-list/${id}`, data),
+  deleteAddressEntry: (id: string) => api.delete(`/firewall/address-list/${id}`)
+}
+
+// Container API
+export const containerApi = {
+  // Containers
+  getAll: () => api.get('/container'),
+  getById: (id: string) => api.get(`/container/${id}`),
+  create: (data: object) => api.post('/container', data),
+  update: (id: string, data: object) => api.patch(`/container/${id}`, data),
+  start: (id: string) => api.post(`/container/${id}/start`),
+  stop: (id: string) => api.post(`/container/${id}/stop`),
+  // Mounts
+  getMounts: () => api.get('/container/mounts'),
+  updateMount: (id: string, data: object) => api.patch(`/container/mounts/${id}`, data),
+  deleteMount: (id: string) => api.delete(`/container/mounts/${id}`),
+  // Envs
+  getEnvs: () => api.get('/container/envs'),
+  updateEnv: (id: string, data: object) => api.patch(`/container/envs/${id}`, data),
+  deleteEnv: (id: string) => api.delete(`/container/envs/${id}`)
 }

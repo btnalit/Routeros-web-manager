@@ -5,9 +5,11 @@
 ## 功能特性
 
 - 🔗 **连接管理** - RouterOS 设备连接配置，支持 API 和 API-SSL 连接，连接信息自动保存
+- 📊 **系统监控** - 实时显示 CPU、内存、磁盘使用率，系统启动时间和运行时长
 - 🌐 **接口管理** - 查看和配置网络接口（启用/禁用/编辑）
   - 支持 L2TP Client 接口的创建、编辑、删除
   - 支持 PPPoE Client 接口的创建、编辑、删除
+- 🔌 **VETH 接口** - 虚拟以太网接口管理，支持 IPv4/IPv6 多地址配置
 - 📍 **IP 地址管理** - IP 地址的增删改查
 - 🛣️ **路由管理** - 静态路由配置
 - 🏊 **IP Pool 管理** - 地址池的创建、编辑、删除
@@ -16,6 +18,15 @@
   - DHCP 服务器配置
   - Networks 网络配置
   - Leases 租约管理（支持静态绑定）
+- 🔥 **防火墙管理** - 完整的防火墙规则管理
+  - Filter 过滤规则
+  - NAT 地址转换规则
+  - Mangle 标记规则
+  - Address List 地址列表
+- 🐳 **容器管理** - Docker 容器管理
+  - 容器列表、启动、停止
+  - 容器环境变量配置
+  - 容器挂载点管理
 - 🧦 **Socksify** - SOCKS5 代理配置管理
 - ⏰ **计划任务** - Scheduler 任务管理（查看/启用/禁用/编辑/删除）
 - 📜 **脚本管理** - Script 脚本编辑和执行，支持中文注释
@@ -184,13 +195,27 @@ routeros-web-manager/
 
 后端服务运行在端口 `3099`，主要端点：
 
+### 系统
+
 - `GET /api/health` - 健康检查
+- `GET /api/dashboard/resource` - 系统资源信息
+
+### 连接管理
+
 - `GET /api/connection/status` - 连接状态
 - `POST /api/connection/connect` - 建立连接
 - `POST /api/connection/disconnect` - 断开连接
+
+### 接口管理
+
 - `GET /api/interfaces` - 接口列表
 - `POST /api/interfaces/l2tp-client` - 创建 L2TP Client
 - `POST /api/interfaces/pppoe-client` - 创建 PPPoE Client
+- `GET /api/interfaces/veth` - VETH 接口列表
+- `POST /api/interfaces/veth` - 创建 VETH 接口
+
+### IP 管理
+
 - `GET /api/ip/addresses` - IP 地址列表
 - `GET /api/ip/routes` - 路由列表
 - `GET /api/ip/pools` - IP Pool 列表
@@ -199,6 +224,24 @@ routeros-web-manager/
 - `GET /api/ip/dhcp-server/networks` - DHCP Networks 列表
 - `GET /api/ip/dhcp-server/leases` - DHCP Leases 列表
 - `GET /api/ip/socks` - Socksify 列表
+
+### 防火墙
+
+- `GET /api/ip/firewall/filter` - Filter 规则列表
+- `GET /api/ip/firewall/nat` - NAT 规则列表
+- `GET /api/ip/firewall/mangle` - Mangle 规则列表
+- `GET /api/ip/firewall/address-list` - 地址列表
+
+### 容器管理
+
+- `GET /api/container` - 容器列表
+- `POST /api/container/:id/start` - 启动容器
+- `POST /api/container/:id/stop` - 停止容器
+- `GET /api/container/envs` - 环境变量列表
+- `GET /api/container/mounts` - 挂载点列表
+
+### 系统管理
+
 - `GET /api/system/scheduler` - 计划任务列表
 - `GET /api/system/scripts` - 脚本列表
 

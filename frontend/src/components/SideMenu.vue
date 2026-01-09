@@ -15,6 +15,11 @@
       <span v-if="!collapsed" class="menu-title">RouterOS Manager</span>
     </div>
 
+    <el-menu-item index="/dashboard">
+      <el-icon><Odometer /></el-icon>
+      <template #title>系统监控</template>
+    </el-menu-item>
+
     <el-menu-item index="/connection">
       <el-icon><Connection /></el-icon>
       <template #title>连接配置</template>
@@ -26,6 +31,7 @@
         <span>Interface</span>
       </template>
       <el-menu-item index="/interfaces">接口列表</el-menu-item>
+      <el-menu-item index="/interfaces/veth">VETH 接口</el-menu-item>
     </el-sub-menu>
 
     <el-sub-menu index="ip">
@@ -49,13 +55,34 @@
       <el-menu-item index="/system/scheduler">计划任务</el-menu-item>
       <el-menu-item index="/system/scripts">脚本管理</el-menu-item>
     </el-sub-menu>
+
+    <el-sub-menu index="firewall">
+      <template #title>
+        <el-icon><Lock /></el-icon>
+        <span>Firewall</span>
+      </template>
+      <el-menu-item index="/firewall/filter">Filter 规则</el-menu-item>
+      <el-menu-item index="/firewall/nat">NAT 规则</el-menu-item>
+      <el-menu-item index="/firewall/mangle">Mangle 规则</el-menu-item>
+      <el-menu-item index="/firewall/address-list">地址列表</el-menu-item>
+    </el-sub-menu>
+
+    <el-sub-menu index="container">
+      <template #title>
+        <el-icon><Box /></el-icon>
+        <span>Container</span>
+      </template>
+      <el-menu-item index="/container">容器列表</el-menu-item>
+      <el-menu-item index="/container/mounts">挂载点</el-menu-item>
+      <el-menu-item index="/container/envs">环境变量</el-menu-item>
+    </el-sub-menu>
   </el-menu>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Setting, Connection, Monitor, Position, Tools } from '@element-plus/icons-vue'
+import { Setting, Connection, Monitor, Position, Tools, Odometer, Lock, Box } from '@element-plus/icons-vue'
 
 defineProps<{
   collapsed?: boolean

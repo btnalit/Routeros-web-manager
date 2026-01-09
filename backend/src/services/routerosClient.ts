@@ -339,6 +339,29 @@ export class RouterOSClient {
   }
 
   /**
+   * 执行自定义命令
+   * @param command 完整的命令路径，如 /container/start
+   * @param params 命令参数
+   */
+  async execute(command: string, params: string[] = []): Promise<void> {
+    this.ensureConnected();
+    try {
+      logger.info(`Executing command: ${command}, params: ${JSON.stringify(params)}`);
+      await this.api!.write(command, params);
+    } catch (error: any) {
+      // 处理 RouterOS 返回 !empty 的情况（某些命令成功执行但无返回）
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('!empty') || 
+          errorMessage.includes('UNKNOWNREPLY') ||
+          error?.errno === 'UNKNOWNREPLY') {
+        logger.info('Command executed successfully (empty response)');
+        return;
+      }
+      throw new Error(this.parseError(error));
+    }
+  }
+
+  /**
    * 确保已连接
    */
   private ensureConnected(): void {

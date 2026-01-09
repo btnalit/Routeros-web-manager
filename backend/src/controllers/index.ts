@@ -5,3 +5,6 @@ export * from './connectionController';
 export * from './interfaceController';
 export * from './ipController';
 export * from './systemController';
+export * from './dashboardController';
+export * from './firewallController';
+export * from './containerController';

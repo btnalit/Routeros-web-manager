@@ -5,8 +5,14 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: AppLayout,
-    redirect: '/connection',
+    redirect: '/dashboard',
     children: [
+      {
+        path: 'dashboard',
+        name: 'Dashboard',
+        component: () => import('@/views/DashboardView.vue'),
+        meta: { title: '系统监控' }
+      },
       {
         path: 'connection',
         name: 'Connection',
@@ -18,6 +24,12 @@ const routes: RouteRecordRaw[] = [
         name: 'Interfaces',
         component: () => import('@/views/InterfaceView.vue'),
         meta: { title: '接口列表' }
+      },
+      {
+        path: 'interfaces/veth',
+        name: 'VethInterfaces',
+        component: () => import('@/views/VethInterfaceView.vue'),
+        meta: { title: 'VETH 接口' }
       },
       {
         path: 'ip/addresses',
@@ -66,6 +78,48 @@ const routes: RouteRecordRaw[] = [
         name: 'Scripts',
         component: () => import('@/views/ScriptView.vue'),
         meta: { title: '脚本管理' }
+      },
+      {
+        path: 'firewall/filter',
+        name: 'FirewallFilter',
+        component: () => import('@/views/FirewallFilterView.vue'),
+        meta: { title: 'Filter 规则' }
+      },
+      {
+        path: 'firewall/nat',
+        name: 'FirewallNat',
+        component: () => import('@/views/FirewallNatView.vue'),
+        meta: { title: 'NAT 规则' }
+      },
+      {
+        path: 'firewall/mangle',
+        name: 'FirewallMangle',
+        component: () => import('@/views/FirewallMangleView.vue'),
+        meta: { title: 'Mangle 规则' }
+      },
+      {
+        path: 'firewall/address-list',
+        name: 'FirewallAddressList',
+        component: () => import('@/views/FirewallAddressListView.vue'),
+        meta: { title: '地址列表' }
+      },
+      {
+        path: 'container',
+        name: 'Container',
+        component: () => import('@/views/ContainerView.vue'),
+        meta: { title: '容器管理' }
+      },
+      {
+        path: 'container/mounts',
+        name: 'ContainerMounts',
+        component: () => import('@/views/ContainerMountsView.vue'),
+        meta: { title: '容器挂载点' }
+      },
+      {
+        path: 'container/envs',
+        name: 'ContainerEnvs',
+        component: () => import('@/views/ContainerEnvsView.vue'),
+        meta: { title: '容器环境变量' }
       }
     ]
   },
