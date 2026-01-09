@@ -120,6 +120,9 @@
                   </template>
                 </el-progress>
               </div>
+              <div class="resource-detail">
+                {{ resource['cpu-count'] || '-' }} 核 @ {{ resource['cpu-frequency'] || '-' }} MHz
+              </div>
             </div>
           </el-col>
 
@@ -479,6 +482,10 @@ onUnmounted(() => {
   text-align: center;
   margin-bottom: 16px;
   transition: all 0.3s ease;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .resource-card:hover {
