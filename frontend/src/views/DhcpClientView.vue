@@ -9,34 +9,33 @@
 
     <el-table :data="clients" v-loading="loading" stripe>
       <el-table-column prop="interface" label="接口" min-width="120" />
-      <el-table-column label="状态" width="100">
+      <el-table-column label="状态" width="80" align="center">
         <template #default="{ row }">
           <el-switch
-            :model-value="toBool(!row.disabled)"
+            :model-value="isEnabled(row)"
             @change="(val: string | number | boolean) => toggleStatus(row, Boolean(val))"
-            active-text="启用"
-            inactive-text="禁用"
+            size="small"
           />
         </template>
       </el-table-column>
-      <el-table-column prop="address" label="获取的地址" min-width="140" />
-      <el-table-column prop="gateway" label="网关" min-width="120" />
-      <el-table-column label="Use Peer DNS" width="120">
+      <el-table-column prop="address" label="获取的地址" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="gateway" label="网关" min-width="140" show-overflow-tooltip />
+      <el-table-column label="Use Peer DNS" width="110" align="center">
         <template #default="{ row }">
           {{ toBool(row['use-peer-dns']) ? '是' : '否' }}
         </template>
       </el-table-column>
-      <el-table-column label="Use Peer NTP" width="120">
+      <el-table-column label="Use Peer NTP" width="110" align="center">
         <template #default="{ row }">
           {{ toBool(row['use-peer-ntp']) ? '是' : '否' }}
         </template>
       </el-table-column>
-      <el-table-column label="添加默认路由" width="120">
+      <el-table-column label="添加默认路由" width="110" align="center">
         <template #default="{ row }">
           {{ row['add-default-route'] || 'no' }}
         </template>
       </el-table-column>
-      <el-table-column prop="status" label="连接状态" width="100" />
+      <el-table-column prop="status" label="连接状态" width="90" align="center" />
       <el-table-column prop="comment" label="备注" min-width="100" show-overflow-tooltip />
       <el-table-column label="操作" width="140" fixed="right" align="center">
         <template #default="{ row }">
@@ -102,6 +101,15 @@ const toBool = (val: any): boolean => {
   if (typeof val === 'boolean') return val
   if (typeof val === 'string') return val.toLowerCase() === 'true'
   return Boolean(val)
+}
+
+// 判断是否启用（disabled 为 false 或 "false" 或不存在时表示启用）
+const isEnabled = (row: any): boolean => {
+  const disabled = row.disabled
+  if (disabled === undefined || disabled === null) return true
+  if (typeof disabled === 'boolean') return !disabled
+  if (typeof disabled === 'string') return disabled.toLowerCase() !== 'true'
+  return !disabled
 }
 
 const fetchData = async () => {

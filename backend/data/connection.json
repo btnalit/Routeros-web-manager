@@ -1,7 +1,7 @@
 {
-  "host": "10.20.2.254",
+  "host": "10.20.2.1",
   "port": 8728,
   "username": "admin",
-  "password": "qq2285003.",
+  "password": "2285003",
   "useTLS": false
 }
