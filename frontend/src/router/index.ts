@@ -80,6 +80,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '脚本管理' }
       },
       {
+        path: 'system/power',
+        name: 'PowerManagement',
+        component: () => import('@/views/PowerManagementView.vue'),
+        meta: { title: '电源管理' }
+      },
+      {
         path: 'firewall/filter',
         name: 'FirewallFilter',
         component: () => import('@/views/FirewallFilterView.vue'),
@@ -120,6 +126,43 @@ const routes: RouteRecordRaw[] = [
         name: 'ContainerEnvs',
         component: () => import('@/views/ContainerEnvsView.vue'),
         meta: { title: '容器环境变量' }
+      },
+      // IPv6 routes
+      {
+        path: 'ipv6/addresses',
+        name: 'IPv6Addresses',
+        component: () => import('@/views/IPv6AddressView.vue'),
+        meta: { title: 'IPv6 地址' }
+      },
+      {
+        path: 'ipv6/dhcp-client',
+        name: 'IPv6DhcpClient',
+        component: () => import('@/views/IPv6DhcpClientView.vue'),
+        meta: { title: 'DHCPv6 客户端' }
+      },
+      {
+        path: 'ipv6/nd',
+        name: 'IPv6Nd',
+        component: () => import('@/views/IPv6NdView.vue'),
+        meta: { title: 'ND 配置' }
+      },
+      {
+        path: 'ipv6/neighbors',
+        name: 'IPv6Neighbors',
+        component: () => import('@/views/IPv6NeighborView.vue'),
+        meta: { title: 'IPv6 邻居表' }
+      },
+      {
+        path: 'ipv6/routes',
+        name: 'IPv6Routes',
+        component: () => import('@/views/IPv6RouteView.vue'),
+        meta: { title: 'IPv6 路由' }
+      },
+      {
+        path: 'ipv6/firewall/filter',
+        name: 'IPv6FirewallFilter',
+        component: () => import('@/views/IPv6FirewallFilterView.vue'),
+        meta: { title: 'IPv6 防火墙 Filter' }
       }
     ]
   },

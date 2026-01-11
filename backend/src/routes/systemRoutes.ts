@@ -20,6 +20,9 @@ import {
   updateScript,
   deleteScript,
   runScript,
+  // Power Management
+  rebootSystem,
+  shutdownSystem,
 } from '../controllers/systemController';
 
 const router = Router();
@@ -66,5 +69,13 @@ router.delete('/scripts/:id', deleteScript);
 
 // POST /api/system/scripts/:id/run - 运行脚本
 router.post('/scripts/:id/run', runScript);
+
+// ==================== 电源管理路由 ====================
+
+// POST /api/system/reboot - 重启系统
+router.post('/reboot', rebootSystem);
+
+// POST /api/system/shutdown - 关闭系统
+router.post('/shutdown', shutdownSystem);
 
 export default router;

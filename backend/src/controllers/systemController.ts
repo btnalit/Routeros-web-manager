@@ -505,3 +505,50 @@ export async function runScript(req: Request, res: Response): Promise<void> {
     });
   }
 }
+
+
+// ==================== 电源管理相关 ====================
+
+/**
+ * 重启系统
+ * POST /api/system/reboot
+ */
+export async function rebootSystem(_req: Request, res: Response): Promise<void> {
+  try {
+    logger.warn('System reboot requested');
+    await routerosClient.execute('/system/reboot');
+    
+    res.json({
+      success: true,
+      message: '系统正在重启...',
+    });
+  } catch (error) {
+    logger.error('Failed to reboot system:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '重启系统失败',
+    });
+  }
+}
+
+/**
+ * 关闭系统
+ * POST /api/system/shutdown
+ */
+export async function shutdownSystem(_req: Request, res: Response): Promise<void> {
+  try {
+    logger.warn('System shutdown requested');
+    await routerosClient.execute('/system/shutdown');
+    
+    res.json({
+      success: true,
+      message: '系统正在关机...',
+    });
+  } catch (error) {
+    logger.error('Failed to shutdown system:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '关闭系统失败',
+    });
+  }
+}

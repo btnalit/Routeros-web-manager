@@ -47,6 +47,19 @@
       <el-menu-item index="/ip/socks">Socksify</el-menu-item>
     </el-sub-menu>
 
+    <el-sub-menu index="ipv6">
+      <template #title>
+        <el-icon><Share /></el-icon>
+        <span>IPv6</span>
+      </template>
+      <el-menu-item index="/ipv6/addresses">地址</el-menu-item>
+      <el-menu-item index="/ipv6/dhcp-client">DHCPv6 客户端</el-menu-item>
+      <el-menu-item index="/ipv6/nd">ND</el-menu-item>
+      <el-menu-item index="/ipv6/neighbors">邻居表</el-menu-item>
+      <el-menu-item index="/ipv6/routes">路由</el-menu-item>
+      <el-menu-item index="/ipv6/firewall/filter">防火墙 Filter</el-menu-item>
+    </el-sub-menu>
+
     <el-sub-menu index="system">
       <template #title>
         <el-icon><Tools /></el-icon>
@@ -54,6 +67,7 @@
       </template>
       <el-menu-item index="/system/scheduler">计划任务</el-menu-item>
       <el-menu-item index="/system/scripts">脚本管理</el-menu-item>
+      <el-menu-item index="/system/power">电源管理</el-menu-item>
     </el-sub-menu>
 
     <el-sub-menu index="firewall">
@@ -82,7 +96,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Setting, Connection, Monitor, Position, Tools, Odometer, Lock, Box } from '@element-plus/icons-vue'
+import { Setting, Connection, Monitor, Position, Tools, Odometer, Lock, Box, Share } from '@element-plus/icons-vue'
 
 defineProps<{
   collapsed?: boolean

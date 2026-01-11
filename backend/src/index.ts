@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { logger } from './utils/logger';
-import { connectionRoutes, interfaceRoutes, ipRoutes, systemRoutes, dashboardRoutes, firewallRoutes, containerRoutes } from './routes';
+import { connectionRoutes, interfaceRoutes, ipRoutes, ipv6Routes, systemRoutes, dashboardRoutes, firewallRoutes, containerRoutes } from './routes';
 
 // Load environment variables
 dotenv.config();
@@ -38,6 +38,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 app.use('/api/connection', connectionRoutes);
 app.use('/api/interfaces', interfaceRoutes);
 app.use('/api/ip', ipRoutes);
+app.use('/api/ipv6', ipv6Routes);
 app.use('/api/system', systemRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/firewall', firewallRoutes);

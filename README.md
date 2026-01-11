@@ -18,6 +18,13 @@
   - DHCP 服务器配置
   - Networks 网络配置
   - Leases 租约管理（支持静态绑定）
+- 🌍 **IPv6 管理** - 完整的 IPv6 网络管理
+  - IPv6 地址管理（增删改查）
+  - DHCPv6 客户端管理（Release/Renew 操作）
+  - 邻居发现（ND）配置
+  - IPv6 邻居表查看（分页显示）
+  - IPv6 路由管理
+  - IPv6 防火墙 Filter 规则管理
 - 🔥 **防火墙管理** - 完整的防火墙规则管理
   - Filter 过滤规则
   - NAT 地址转换规则
@@ -30,6 +37,7 @@
 - 🧦 **Socksify** - SOCKS5 代理配置管理
 - ⏰ **计划任务** - Scheduler 任务管理（查看/启用/禁用/编辑/删除）
 - 📜 **脚本管理** - Script 脚本编辑和执行，支持中文注释
+- ⚡ **电源管理** - 系统重启和关机操作（带安全确认）
 
 ## 技术栈
 
@@ -244,6 +252,22 @@ routeros-web-manager/
 
 - `GET /api/system/scheduler` - 计划任务列表
 - `GET /api/system/scripts` - 脚本列表
+- `POST /api/system/reboot` - 重启系统
+- `POST /api/system/shutdown` - 关闭系统
+
+### IPv6 管理
+
+- `GET /api/ipv6/addresses` - IPv6 地址列表
+- `POST /api/ipv6/addresses` - 添加 IPv6 地址
+- `PATCH /api/ipv6/addresses/:id` - 更新 IPv6 地址
+- `DELETE /api/ipv6/addresses/:id` - 删除 IPv6 地址
+- `GET /api/ipv6/dhcp-client` - DHCPv6 客户端列表
+- `POST /api/ipv6/dhcp-client/:id/release` - 释放 DHCPv6 租约
+- `POST /api/ipv6/dhcp-client/:id/renew` - 续约 DHCPv6 租约
+- `GET /api/ipv6/nd` - ND 配置列表
+- `GET /api/ipv6/neighbors` - IPv6 邻居表
+- `GET /api/ipv6/routes` - IPv6 路由列表
+- `GET /api/ipv6/firewall/filter` - IPv6 防火墙 Filter 规则列表
 
 ## RouterOS 配置
 

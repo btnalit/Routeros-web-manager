@@ -4,6 +4,7 @@
 export { default as connectionRoutes } from './connectionRoutes';
 export { default as interfaceRoutes } from './interfaceRoutes';
 export { default as ipRoutes } from './ipRoutes';
+export { default as ipv6Routes } from './ipv6Routes';
 export { default as systemRoutes } from './systemRoutes';
 export { default as dashboardRoutes } from './dashboardRoutes';
 export { default as firewallRoutes } from './firewallRoutes';
