@@ -278,11 +278,6 @@ const setStreamingContent = (value: string) => {
   getCurrentStreamState().streamingContent = value
 }
 
-// 追加流式内容
-const appendStreamingContent = (chunk: string) => {
-  getCurrentStreamState().streamingContent += chunk
-}
-
 // 获取/设置当前会话的 AbortController
 const getAbortController = (): AbortController | null => {
   return getCurrentStreamState().abortController
