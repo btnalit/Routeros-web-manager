@@ -11,7 +11,7 @@ import { OpenAIAdapter } from './openaiAdapter';
 import { GeminiAdapter } from './geminiAdapter';
 import { DeepSeekAdapter } from './deepseekAdapter';
 import { QwenAdapter } from './qwenAdapter';
-import { DoubaoAdapter } from './doubaoAdapter';
+import { ZhipuAdapter } from './zhipuAdapter';
 
 describe('AdapterFactory', () => {
   const testConfig = {
@@ -40,9 +40,9 @@ describe('AdapterFactory', () => {
       expect(adapter).toBeInstanceOf(QwenAdapter);
     });
 
-    it('should create Doubao adapter', () => {
-      const adapter = AdapterFactory.createAdapter(AIProvider.DOUBAO, testConfig);
-      expect(adapter).toBeInstanceOf(DoubaoAdapter);
+    it('should create Zhipu adapter', () => {
+      const adapter = AdapterFactory.createAdapter(AIProvider.ZHIPU, testConfig);
+      expect(adapter).toBeInstanceOf(ZhipuAdapter);
     });
 
     it('should throw error for unsupported provider', () => {
@@ -59,7 +59,7 @@ describe('AdapterFactory', () => {
       expect(providers).toContain(AIProvider.GEMINI);
       expect(providers).toContain(AIProvider.DEEPSEEK);
       expect(providers).toContain(AIProvider.QWEN);
-      expect(providers).toContain(AIProvider.DOUBAO);
+      expect(providers).toContain(AIProvider.ZHIPU);
       expect(providers).toHaveLength(5);
     });
   });
@@ -70,7 +70,7 @@ describe('AdapterFactory', () => {
       expect(AdapterFactory.isProviderSupported(AIProvider.GEMINI)).toBe(true);
       expect(AdapterFactory.isProviderSupported(AIProvider.DEEPSEEK)).toBe(true);
       expect(AdapterFactory.isProviderSupported(AIProvider.QWEN)).toBe(true);
-      expect(AdapterFactory.isProviderSupported(AIProvider.DOUBAO)).toBe(true);
+      expect(AdapterFactory.isProviderSupported(AIProvider.ZHIPU)).toBe(true);
     });
 
     it('should return false for unsupported providers', () => {
@@ -187,26 +187,26 @@ describe('QwenAdapter', () => {
   });
 });
 
-describe('DoubaoAdapter', () => {
-  const adapter = new DoubaoAdapter({
+describe('ZhipuAdapter', () => {
+  const adapter = new ZhipuAdapter({
     apiKey: 'test-key'
   });
 
   it('should use default endpoint when not provided', () => {
-    expect((adapter as any).endpoint).toBe(DEFAULT_ENDPOINTS[AIProvider.DOUBAO]);
+    expect((adapter as any).endpoint).toBe(DEFAULT_ENDPOINTS[AIProvider.ZHIPU]);
   });
 
   it('should use custom endpoint when provided', () => {
-    const customAdapter = new DoubaoAdapter({
+    const customAdapter = new ZhipuAdapter({
       apiKey: 'test-key',
-      endpoint: 'https://custom.doubao.com/v1'
+      endpoint: 'https://custom.zhipu.com/v4'
     });
-    expect((customAdapter as any).endpoint).toBe('https://custom.doubao.com/v1');
+    expect((customAdapter as any).endpoint).toBe('https://custom.zhipu.com/v4');
   });
 
   it('should return default models', async () => {
     const models = await adapter.listModels();
-    expect(models).toEqual(DEFAULT_MODELS[AIProvider.DOUBAO]);
+    expect(models).toEqual(DEFAULT_MODELS[AIProvider.ZHIPU]);
   });
 });
 
