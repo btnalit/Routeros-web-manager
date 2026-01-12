@@ -163,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch, shallowRef } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ChatDotRound,

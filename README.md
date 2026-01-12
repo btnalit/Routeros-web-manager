@@ -39,7 +39,7 @@
 - 📜 **脚本管理** - Script 脚本编辑和执行，支持中文注释
 - ⚡ **电源管理** - 系统重启和关机操作（带安全确认）
 - 🤖 **AI 智能助手** - 基于大语言模型的 RouterOS 配置助手
-  - 支持多种 AI 服务商（OpenAI、DeepSeek、Gemini、通义千问、Ollama）
+  - 支持多种 AI 服务商（OpenAI、DeepSeek、Gemini、通义千问、llamaO）
   - 自然语言交互，智能生成 RouterOS 命令
   - 一键执行 AI 生成的命令，结果自动反馈给 AI 分析
   - 会话管理，支持多轮对话和历史记录
