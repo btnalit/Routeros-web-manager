@@ -23,7 +23,7 @@ export enum AIProvider {
   GEMINI = 'gemini',
   DEEPSEEK = 'deepseek',
   QWEN = 'qwen',
-  DOUBAO = 'doubao'
+  ZHIPU = 'zhipu'
 }
 
 /**

@@ -6,7 +6,7 @@
  * - Google (Gemini)
  * - DeepSeek
  * - Qwen (阿里云)
- * - Doubao (豆包)
+ * - Zhipu (智谱AI/GLM)
  */
 
 // 基础适配器
@@ -20,4 +20,4 @@ export { OpenAIAdapter } from './openaiAdapter';
 export { GeminiAdapter } from './geminiAdapter';
 export { DeepSeekAdapter } from './deepseekAdapter';
 export { QwenAdapter } from './qwenAdapter';
-export { DoubaoAdapter } from './doubaoAdapter';
+export { ZhipuAdapter } from './zhipuAdapter';

@@ -230,7 +230,7 @@ const DEFAULT_ENDPOINTS: Record<AIProvider, string> = {
   [AIProvider.GEMINI]: 'https://generativelanguage.googleapis.com/v1beta',
   [AIProvider.DEEPSEEK]: 'https://api.deepseek.com/v1',
   [AIProvider.QWEN]: 'https://dashscope.aliyuncs.com/api/v1',
-  [AIProvider.DOUBAO]: 'https://ark.cn-beijing.volces.com/api/v3'
+  [AIProvider.ZHIPU]: 'https://open.bigmodel.cn/api/paas/v4'
 }
 
 const PROVIDER_DISPLAY_NAMES: Record<AIProvider, string> = {
@@ -238,7 +238,7 @@ const PROVIDER_DISPLAY_NAMES: Record<AIProvider, string> = {
   [AIProvider.GEMINI]: 'Gemini',
   [AIProvider.DEEPSEEK]: 'DeepSeek',
   [AIProvider.QWEN]: 'Qwen',
-  [AIProvider.DOUBAO]: '豆包'
+  [AIProvider.ZHIPU]: '智谱AI'
 }
 
 // ==================== 状态 ====================
@@ -370,7 +370,7 @@ const getProviderTagType = (provider: AIProvider): 'success' | 'warning' | 'info
     [AIProvider.GEMINI]: 'primary',
     [AIProvider.DEEPSEEK]: 'info',
     [AIProvider.QWEN]: 'warning',
-    [AIProvider.DOUBAO]: 'danger'
+    [AIProvider.ZHIPU]: 'danger'
   }
   return typeMap[provider] || 'info'
 }

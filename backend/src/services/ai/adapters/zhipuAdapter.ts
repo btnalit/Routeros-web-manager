@@ -1,8 +1,8 @@
 /**
- * Doubao (豆包/字节跳动) 适配器
+ * 智谱 AI (Zhipu/GLM) 适配器
  * 
- * 实现与字节跳动火山引擎 API 的通信，支持流式和非流式响应
- * Doubao API 兼容 OpenAI API 格式
+ * 实现与智谱 AI API 的通信，支持流式和非流式响应
+ * 智谱 AI API 兼容 OpenAI API 格式
  */
 
 import {
@@ -17,28 +17,28 @@ import {
 import { BaseAdapter, AdapterConfig, AIAdapterError } from './baseAdapter';
 
 /**
- * Doubao API 消息格式（兼容 OpenAI）
+ * 智谱 API 消息格式（兼容 OpenAI）
  */
-interface DoubaoMessage {
+interface ZhipuMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
 }
 
 /**
- * Doubao API 请求格式
+ * 智谱 API 请求格式
  */
-interface DoubaoRequest {
+interface ZhipuRequest {
   model: string;
-  messages: DoubaoMessage[];
+  messages: ZhipuMessage[];
   stream?: boolean;
   temperature?: number;
   max_tokens?: number;
 }
 
 /**
- * Doubao API 响应格式
+ * 智谱 API 响应格式
  */
-interface DoubaoResponse {
+interface ZhipuResponse {
   id: string;
   object: string;
   created: number;
@@ -59,9 +59,9 @@ interface DoubaoResponse {
 }
 
 /**
- * Doubao 流式响应块格式
+ * 智谱流式响应块格式
  */
-interface DoubaoStreamChunk {
+interface ZhipuStreamChunk {
   id: string;
   object: string;
   created: number;
@@ -77,22 +77,22 @@ interface DoubaoStreamChunk {
 }
 
 /**
- * Doubao 适配器实现
+ * 智谱 AI 适配器实现
  */
-export class DoubaoAdapter extends BaseAdapter {
-  protected provider = AIProvider.DOUBAO;
+export class ZhipuAdapter extends BaseAdapter {
+  protected provider = AIProvider.ZHIPU;
 
   constructor(config: AdapterConfig) {
     super(config);
     if (!this.endpoint) {
-      this.endpoint = DEFAULT_ENDPOINTS[AIProvider.DOUBAO];
+      this.endpoint = DEFAULT_ENDPOINTS[AIProvider.ZHIPU];
     }
   }
 
   /**
    * 转换消息格式
    */
-  private convertMessages(messages: ChatMessage[]): DoubaoMessage[] {
+  private convertMessages(messages: ChatMessage[]): ZhipuMessage[] {
     return messages.map(msg => ({
       role: msg.role,
       content: msg.content
@@ -105,7 +105,7 @@ export class DoubaoAdapter extends BaseAdapter {
   async chat(request: ChatRequest): Promise<ChatResponse> {
     const url = `${this.endpoint}/chat/completions`;
     
-    const body: DoubaoRequest = {
+    const body: ZhipuRequest = {
       model: request.model,
       messages: this.convertMessages(request.messages),
       stream: false,
@@ -127,7 +127,7 @@ export class DoubaoAdapter extends BaseAdapter {
       this.handleHttpError(response.status, errorBody);
     }
 
-    const data = await response.json() as DoubaoResponse;
+    const data = await response.json() as ZhipuResponse;
     
     return {
       content: data.choices[0]?.message?.content || '',
@@ -146,7 +146,7 @@ export class DoubaoAdapter extends BaseAdapter {
   async *chatStream(request: ChatRequest): AsyncGenerator<string> {
     const url = `${this.endpoint}/chat/completions`;
     
-    const body: DoubaoRequest = {
+    const body: ZhipuRequest = {
       model: request.model,
       messages: this.convertMessages(request.messages),
       stream: true,
@@ -194,7 +194,7 @@ export class DoubaoAdapter extends BaseAdapter {
 
           try {
             const json = trimmed.slice(6);
-            const chunk: DoubaoStreamChunk = JSON.parse(json);
+            const chunk: ZhipuStreamChunk = JSON.parse(json);
             const content = chunk.choices[0]?.delta?.content;
             if (content) {
               yield content;
@@ -211,24 +211,39 @@ export class DoubaoAdapter extends BaseAdapter {
 
   /**
    * 验证 API Key
-   * 注意：豆包 API 需要 Endpoint ID，无法仅通过 API Key 验证
-   * 这里只检查 API Key 格式是否正确
    */
   async validateApiKey(apiKey: string): Promise<boolean> {
-    // 豆包 API Key 格式通常是 UUID 格式
-    // 由于需要 Endpoint ID 才能真正调用，这里只做基本格式检查
     if (!apiKey || apiKey.length < 10) {
       return false;
     }
-    // 返回 true 表示格式正确，实际调用时才会验证
-    return true;
+    
+    try {
+      // 发送一个简单的请求来验证 API Key
+      const url = `${this.endpoint}/chat/completions`;
+      const response = await this.fetchWithTimeout(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'glm-4-flash',
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 1
+        })
+      });
+      
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   /**
    * 获取可用模型列表
    */
   async listModels(): Promise<string[]> {
-    // Doubao API 没有列出模型的端点，返回默认列表
-    return DEFAULT_MODELS[AIProvider.DOUBAO];
+    // 智谱 API 没有列出模型的端点，返回默认列表
+    return DEFAULT_MODELS[AIProvider.ZHIPU];
   }
 }

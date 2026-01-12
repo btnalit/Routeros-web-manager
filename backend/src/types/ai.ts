@@ -13,7 +13,7 @@ export enum AIProvider {
   GEMINI = 'gemini',
   DEEPSEEK = 'deepseek',
   QWEN = 'qwen',
-  DOUBAO = 'doubao'
+  ZHIPU = 'zhipu'
 }
 
 // ==================== 消息类型 ====================
@@ -351,11 +351,11 @@ export const DEFAULT_ENDPOINTS: Record<AIProvider, string> = {
   [AIProvider.GEMINI]: 'https://generativelanguage.googleapis.com/v1beta',
   [AIProvider.DEEPSEEK]: 'https://api.deepseek.com/v1',
   [AIProvider.QWEN]: 'https://dashscope.aliyuncs.com/api/v1',
-  [AIProvider.DOUBAO]: 'https://ark.cn-beijing.volces.com/api/v3'
+  [AIProvider.ZHIPU]: 'https://open.bigmodel.cn/api/paas/v4'
 };
 
 /**
- * 默认模型列表 (2025年1月更新)
+ * 默认模型列表 (2026年1月更新)
  */
 export const DEFAULT_MODELS: Record<AIProvider, string[]> = {
   [AIProvider.OPENAI]: [
@@ -388,8 +388,12 @@ export const DEFAULT_MODELS: Record<AIProvider, string[]> = {
     'qwen-plus',
     'qwen-turbo'
   ],
-  [AIProvider.DOUBAO]: [
-    'ep-xxxxxxxx（填写你的接入点ID）'
+  [AIProvider.ZHIPU]: [
+    'glm-4.7',
+    'glm-4-plus',
+    'glm-4-flash',
+    'glm-4-flashx',
+    'glm-4-air'
   ]
 };
 

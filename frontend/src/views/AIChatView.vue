@@ -220,7 +220,7 @@ const PROVIDER_DISPLAY_NAMES: Record<AIProvider, string> = {
   [AIProvider.GEMINI]: 'Gemini',
   [AIProvider.DEEPSEEK]: 'DeepSeek',
   [AIProvider.QWEN]: 'Qwen',
-  [AIProvider.DOUBAO]: '豆包'
+  [AIProvider.ZHIPU]: '智谱AI'
 }
 
 // ==================== 状态 ====================
@@ -683,6 +683,17 @@ const sendMessageToAI = async (message: string) => {
 // Handle session selection from sidebar
 const handleSelectSession = async (session: ChatSession) => {
   try {
+    // 如果有正在进行的流式请求，先停止它
+    if (abortController) {
+      abortController.abort()
+      abortController = null
+    }
+    
+    // 清除当前的流式内容和加载状态
+    streamingContent.value = ''
+    isLoading.value = false
+    error.value = ''
+    
     // Load full session data
     const response = await sessionApi.getById(session.id)
     if (response.data.success && response.data.data) {
@@ -708,11 +719,18 @@ const handleSelectSession = async (session: ChatSession) => {
 
 // Handle new session from sidebar
 const handleNewSessionFromSidebar = () => {
+  // 如果有正在进行的流式请求，先停止它
+  if (abortController) {
+    abortController.abort()
+    abortController = null
+  }
+  
   currentSession.value = null
   messages.value = []
   error.value = ''
   streamingContent.value = ''
   inputMessage.value = ''
+  isLoading.value = false
 }
 
 // Handle session deleted from sidebar

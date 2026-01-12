@@ -10,7 +10,7 @@ import { OpenAIAdapter } from './openaiAdapter';
 import { GeminiAdapter } from './geminiAdapter';
 import { DeepSeekAdapter } from './deepseekAdapter';
 import { QwenAdapter } from './qwenAdapter';
-import { DoubaoAdapter } from './doubaoAdapter';
+import { ZhipuAdapter } from './zhipuAdapter';
 
 /**
  * 适配器工厂类
@@ -35,8 +35,8 @@ export class AdapterFactory {
         return new DeepSeekAdapter(config);
       case AIProvider.QWEN:
         return new QwenAdapter(config);
-      case AIProvider.DOUBAO:
-        return new DoubaoAdapter(config);
+      case AIProvider.ZHIPU:
+        return new ZhipuAdapter(config);
       default:
         throw new Error(`Unsupported AI provider: ${provider}`);
     }
@@ -51,7 +51,7 @@ export class AdapterFactory {
       AIProvider.GEMINI,
       AIProvider.DEEPSEEK,
       AIProvider.QWEN,
-      AIProvider.DOUBAO
+      AIProvider.ZHIPU
     ];
   }
 

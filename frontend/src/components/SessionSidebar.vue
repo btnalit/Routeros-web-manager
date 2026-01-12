@@ -208,7 +208,7 @@ const PROVIDER_NAMES: Record<AIProvider, string> = {
   [AIProvider.GEMINI]: 'Gemini',
   [AIProvider.DEEPSEEK]: 'DeepSeek',
   [AIProvider.QWEN]: 'Qwen',
-  [AIProvider.DOUBAO]: '豆包'
+  [AIProvider.ZHIPU]: '智谱AI'
 }
 
 // ==================== State ====================
