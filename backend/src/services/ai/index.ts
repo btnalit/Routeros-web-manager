@@ -30,7 +30,7 @@ export {
   GeminiAdapter,
   DeepSeekAdapter,
   QwenAdapter,
-  DoubaoAdapter
+  ZhipuAdapter
 } from './adapters';
 
 // ScriptExecutorService - 脚本执行服务

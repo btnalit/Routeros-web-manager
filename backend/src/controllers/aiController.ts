@@ -280,7 +280,7 @@ function getProviderDisplayName(provider: AIProvider): string {
     [AIProvider.GEMINI]: 'Google Gemini',
     [AIProvider.DEEPSEEK]: 'DeepSeek',
     [AIProvider.QWEN]: '通义千问 (Qwen)',
-    [AIProvider.DOUBAO]: '豆包 (Doubao)',
+    [AIProvider.ZHIPU]: '智谱AI (Zhipu)',
   };
   return names[provider] || provider;
 }
