@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { logger } from './utils/logger';
-import { connectionRoutes, interfaceRoutes, ipRoutes, ipv6Routes, systemRoutes, dashboardRoutes, firewallRoutes, containerRoutes } from './routes';
+import { connectionRoutes, interfaceRoutes, ipRoutes, ipv6Routes, systemRoutes, dashboardRoutes, firewallRoutes, containerRoutes, aiRoutes } from './routes';
 
 // Load environment variables
 dotenv.config();
@@ -43,6 +43,7 @@ app.use('/api/system', systemRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/firewall', firewallRoutes);
 app.use('/api/container', containerRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Error handling middleware
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

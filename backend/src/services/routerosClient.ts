@@ -362,6 +362,34 @@ export class RouterOSClient {
   }
 
   /**
+   * 执行原始命令并返回结果
+   * 直接透传命令到 RouterOS，返回原始响应或错误
+   * @param command API 格式的命令路径，如 /ip/address/print
+   * @param params 命令参数数组
+   * @returns 命令执行结果
+   */
+  async executeRaw(command: string, params: string[] = []): Promise<unknown> {
+    this.ensureConnected();
+    try {
+      logger.info(`Executing raw command: ${command}, params: ${JSON.stringify(params)}`);
+      const response = await this.api!.write(command, params);
+      logger.info(`Raw command response: ${JSON.stringify(response)}`);
+      return response;
+    } catch (error: any) {
+      // 处理 RouterOS 返回 !empty 的情况（某些命令成功执行但无返回）
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('!empty') || 
+          errorMessage.includes('UNKNOWNREPLY') ||
+          error?.errno === 'UNKNOWNREPLY') {
+        logger.info('Raw command executed successfully (empty response)');
+        return [];
+      }
+      // 直接抛出原始错误信息，不做翻译
+      throw error;
+    }
+  }
+
+  /**
    * 确保已连接
    */
   private ensureConnected(): void {

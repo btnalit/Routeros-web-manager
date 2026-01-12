@@ -3,3 +3,4 @@
  */
 export * from './routeros';
 export * from './ipv6';
+export * from './ai';

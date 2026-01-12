@@ -163,6 +163,19 @@ const routes: RouteRecordRaw[] = [
         name: 'IPv6FirewallFilter',
         component: () => import('@/views/IPv6FirewallFilterView.vue'),
         meta: { title: 'IPv6 防火墙 Filter' }
+      },
+      // AI Agent routes
+      {
+        path: 'ai/chat',
+        name: 'AIChat',
+        component: () => import('@/views/AIChatView.vue'),
+        meta: { title: 'AI 对话' }
+      },
+      {
+        path: 'ai/config',
+        name: 'AIConfig',
+        component: () => import('@/views/AIConfigView.vue'),
+        meta: { title: 'AI 服务配置' }
       }
     ]
   },

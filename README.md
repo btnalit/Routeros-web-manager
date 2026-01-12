@@ -38,6 +38,12 @@
 - ⏰ **计划任务** - Scheduler 任务管理（查看/启用/禁用/编辑/删除）
 - 📜 **脚本管理** - Script 脚本编辑和执行，支持中文注释
 - ⚡ **电源管理** - 系统重启和关机操作（带安全确认）
+- 🤖 **AI 智能助手** - 基于大语言模型的 RouterOS 配置助手
+  - 支持多种 AI 服务商（OpenAI、DeepSeek、Gemini、通义千问、Ollama）
+  - 自然语言交互，智能生成 RouterOS 命令
+  - 一键执行 AI 生成的命令，结果自动反馈给 AI 分析
+  - 会话管理，支持多轮对话和历史记录
+  - 流式响应，实时显示 AI 回复
 
 ## 技术栈
 
@@ -268,6 +274,20 @@ routeros-web-manager/
 - `GET /api/ipv6/neighbors` - IPv6 邻居表
 - `GET /api/ipv6/routes` - IPv6 路由列表
 - `GET /api/ipv6/firewall/filter` - IPv6 防火墙 Filter 规则列表
+
+### AI 智能助手
+
+- `GET /api/ai/configs` - AI 服务配置列表
+- `POST /api/ai/configs` - 创建 AI 服务配置
+- `PUT /api/ai/configs/:id` - 更新 AI 服务配置
+- `DELETE /api/ai/configs/:id` - 删除 AI 服务配置
+- `GET /api/ai/sessions` - 会话列表
+- `POST /api/ai/sessions` - 创建会话
+- `GET /api/ai/sessions/:id` - 获取会话详情
+- `DELETE /api/ai/sessions/:id` - 删除会话
+- `POST /api/ai/chat/stream` - 流式对话（SSE）
+- `POST /api/ai/scripts/execute` - 执行 RouterOS 命令
+- `POST /api/ai/scripts/validate` - 验证命令语法
 
 ## RouterOS 配置
 

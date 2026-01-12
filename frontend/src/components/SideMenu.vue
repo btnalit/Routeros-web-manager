@@ -90,13 +90,22 @@
       <el-menu-item index="/container/mounts">挂载点</el-menu-item>
       <el-menu-item index="/container/envs">环境变量</el-menu-item>
     </el-sub-menu>
+
+    <el-sub-menu index="ai">
+      <template #title>
+        <el-icon><ChatDotRound /></el-icon>
+        <span>AI Agent</span>
+      </template>
+      <el-menu-item index="/ai/chat">AI 对话</el-menu-item>
+      <el-menu-item index="/ai/config">服务配置</el-menu-item>
+    </el-sub-menu>
   </el-menu>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Setting, Connection, Monitor, Position, Tools, Odometer, Lock, Box, Share } from '@element-plus/icons-vue'
+import { Setting, Connection, Monitor, Position, Tools, Odometer, Lock, Box, Share, ChatDotRound } from '@element-plus/icons-vue'
 
 defineProps<{
   collapsed?: boolean

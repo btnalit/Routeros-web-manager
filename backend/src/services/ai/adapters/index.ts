@@ -1,0 +1,23 @@
+/**
+ * AI 提供商适配器模块导出
+ * 
+ * 本模块提供各 AI 服务提供商的适配器：
+ * - OpenAI (ChatGPT)
+ * - Google (Gemini)
+ * - DeepSeek
+ * - Qwen (阿里云)
+ * - Doubao (豆包)
+ */
+
+// 基础适配器
+export { BaseAdapter, AdapterConfig, AIAdapterError } from './baseAdapter';
+
+// 适配器工厂
+export { AdapterFactory } from './adapterFactory';
+
+// 各提供商适配器
+export { OpenAIAdapter } from './openaiAdapter';
+export { GeminiAdapter } from './geminiAdapter';
+export { DeepSeekAdapter } from './deepseekAdapter';
+export { QwenAdapter } from './qwenAdapter';
+export { DoubaoAdapter } from './doubaoAdapter';
