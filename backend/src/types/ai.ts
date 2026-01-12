@@ -389,13 +389,7 @@ export const DEFAULT_MODELS: Record<AIProvider, string[]> = {
     'qwen-turbo'
   ],
   [AIProvider.DOUBAO]: [
-    'doubao-seed-1-8-251228',
-    'doubao-seed-1.6',
-    'doubao-seed-1.8',
-    'doubao-seed-1.6-thinking',
-    'doubao-seed-1.6-vision',
-    'doubao-seedance-1.0-pro',
-    'doubao-1.5-ui-tars'
+    'ep-xxxxxxxx（填写你的接入点ID）'
   ]
 };
 

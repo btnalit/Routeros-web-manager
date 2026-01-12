@@ -211,30 +211,17 @@ export class DoubaoAdapter extends BaseAdapter {
 
   /**
    * 验证 API Key
+   * 注意：豆包 API 需要 Endpoint ID，无法仅通过 API Key 验证
+   * 这里只检查 API Key 格式是否正确
    */
   async validateApiKey(apiKey: string): Promise<boolean> {
-    // Doubao 使用简单请求测试 API Key
-    const url = `${this.endpoint}/chat/completions`;
-    
-    const body: DoubaoRequest = {
-      model: 'doubao-seed-1.6',
-      messages: [{ role: 'user', content: 'hi' }],
-      max_tokens: 1
-    };
-
-    try {
-      const response = await this.fetchWithTimeout(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(body)
-      });
-      return response.ok;
-    } catch {
+    // 豆包 API Key 格式通常是 UUID 格式
+    // 由于需要 Endpoint ID 才能真正调用，这里只做基本格式检查
+    if (!apiKey || apiKey.length < 10) {
       return false;
     }
+    // 返回 true 表示格式正确，实际调用时才会验证
+    return true;
   }
 
   /**
