@@ -230,8 +230,6 @@ const selectedConfigId = ref<string>('')
 const currentSession = ref<ChatSession | null>(null)
 const messages = ref<ChatMessage[]>([])
 const inputMessage = ref('')
-const isLoading = ref(false)
-const streamingContent = ref('')
 const error = ref('')
 const includeContext = ref(true)
 const messagesContainer = ref<HTMLElement | null>(null)
@@ -239,8 +237,60 @@ const lastMessage = ref('')
 const sidebarCollapsed = ref(false)
 const sessionSidebar = ref<InstanceType<typeof SessionSidebar> | null>(null)
 
-// AbortController for canceling streaming requests
-let abortController: AbortController | null = null
+// ==================== 会话流式状态管理 ====================
+
+// 每个会话独立的流式状态
+interface SessionStreamState {
+  isLoading: boolean
+  streamingContent: string
+  abortController: AbortController | null
+}
+
+// 会话流式状态映射 (sessionId -> state)
+const sessionStreamStates = ref<Map<string, SessionStreamState>>(new Map())
+
+// 获取当前会话的流式状态
+const getCurrentStreamState = (): SessionStreamState => {
+  const sessionId = currentSession.value?.id || '__new__'
+  if (!sessionStreamStates.value.has(sessionId)) {
+    sessionStreamStates.value.set(sessionId, {
+      isLoading: false,
+      streamingContent: '',
+      abortController: null
+    })
+  }
+  return sessionStreamStates.value.get(sessionId)!
+}
+
+// 计算属性：当前会话是否正在加载
+const isLoading = computed(() => getCurrentStreamState().isLoading)
+
+// 计算属性：当前会话的流式内容
+const streamingContent = computed(() => getCurrentStreamState().streamingContent)
+
+// 设置当前会话的加载状态
+const setLoading = (value: boolean) => {
+  getCurrentStreamState().isLoading = value
+}
+
+// 设置当前会话的流式内容
+const setStreamingContent = (value: string) => {
+  getCurrentStreamState().streamingContent = value
+}
+
+// 追加流式内容
+const appendStreamingContent = (chunk: string) => {
+  getCurrentStreamState().streamingContent += chunk
+}
+
+// 获取/设置当前会话的 AbortController
+const getAbortController = (): AbortController | null => {
+  return getCurrentStreamState().abortController
+}
+
+const setAbortController = (controller: AbortController | null) => {
+  getCurrentStreamState().abortController = controller
+}
 
 // ==================== 计算属性 ====================
 
@@ -382,8 +432,8 @@ const handleSend = async () => {
   lastMessage.value = message
   inputMessage.value = ''
   error.value = ''
-  isLoading.value = true
-  streamingContent.value = ''
+  setLoading(true)
+  setStreamingContent('')
 
   try {
     // Create session if not exists
@@ -399,7 +449,7 @@ const handleSend = async () => {
     }
 
     // Send streaming request
-    abortController = chatApi.sendStream(
+    const controller = chatApi.sendStream(
       {
         configId: selectedConfigId.value,
         sessionId: currentSession.value?.id,
@@ -408,7 +458,12 @@ const handleSend = async () => {
       },
       {
         onChunk: (chunk) => {
-          streamingContent.value += chunk
+          // 只有当前会话才更新流式内容
+          const sessionId = currentSession.value?.id || '__new__'
+          const state = sessionStreamStates.value.get(sessionId)
+          if (state) {
+            state.streamingContent += chunk
+          }
         },
         onComplete: (fullContent) => {
           // Add assistant message
@@ -416,9 +471,9 @@ const handleSend = async () => {
             role: 'assistant',
             content: fullContent
           })
-          streamingContent.value = ''
-          isLoading.value = false
-          abortController = null
+          setStreamingContent('')
+          setLoading(false)
+          setAbortController(null)
           
           // Setup code block event listeners after render
           nextTick(() => {
@@ -427,25 +482,27 @@ const handleSend = async () => {
         },
         onError: (errorMsg) => {
           error.value = errorMsg
-          isLoading.value = false
-          streamingContent.value = ''
-          abortController = null
+          setLoading(false)
+          setStreamingContent('')
+          setAbortController(null)
         }
       }
     )
+    setAbortController(controller)
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : '发送消息失败'
     error.value = errorMsg
-    isLoading.value = false
-    streamingContent.value = ''
+    setLoading(false)
+    setStreamingContent('')
   }
 }
 
 // Stop generation
 const handleStopGeneration = () => {
-  if (abortController) {
-    abortController.abort()
-    abortController = null
+  const controller = getAbortController()
+  if (controller) {
+    controller.abort()
+    setAbortController(null)
   }
   
   // Save partial content if any
@@ -456,8 +513,8 @@ const handleStopGeneration = () => {
     })
   }
   
-  streamingContent.value = ''
-  isLoading.value = false
+  setStreamingContent('')
+  setLoading(false)
 }
 
 // Retry last message
@@ -486,8 +543,16 @@ const handleClearMessages = async () => {
       }
     )
     
+    // 停止当前会话的流式请求
+    const controller = getAbortController()
+    if (controller) {
+      controller.abort()
+      setAbortController(null)
+    }
+    
     messages.value = []
-    streamingContent.value = ''
+    setStreamingContent('')
+    setLoading(false)
     error.value = ''
     currentSession.value = null
     ElMessage.success('对话已清空')
@@ -624,8 +689,8 @@ const sendMessageToAI = async (message: string) => {
   if (!selectedConfigId.value || isLoading.value) return
   
   error.value = ''
-  isLoading.value = true
-  streamingContent.value = ''
+  setLoading(true)
+  setStreamingContent('')
 
   try {
     // Create session if not exists
@@ -640,7 +705,7 @@ const sendMessageToAI = async (message: string) => {
     }
 
     // Send streaming request
-    abortController = chatApi.sendStream(
+    const controller = chatApi.sendStream(
       {
         configId: selectedConfigId.value,
         sessionId: currentSession.value?.id,
@@ -649,16 +714,21 @@ const sendMessageToAI = async (message: string) => {
       },
       {
         onChunk: (chunk) => {
-          streamingContent.value += chunk
+          // 只有当前会话才更新流式内容
+          const sessionId = currentSession.value?.id || '__new__'
+          const state = sessionStreamStates.value.get(sessionId)
+          if (state) {
+            state.streamingContent += chunk
+          }
         },
         onComplete: (fullContent) => {
           messages.value.push({
             role: 'assistant',
             content: fullContent
           })
-          streamingContent.value = ''
-          isLoading.value = false
-          abortController = null
+          setStreamingContent('')
+          setLoading(false)
+          setAbortController(null)
           
           nextTick(() => {
             setupCodeBlockListeners()
@@ -666,32 +736,26 @@ const sendMessageToAI = async (message: string) => {
         },
         onError: (errorMsg) => {
           error.value = errorMsg
-          isLoading.value = false
-          streamingContent.value = ''
-          abortController = null
+          setLoading(false)
+          setStreamingContent('')
+          setAbortController(null)
         }
       }
     )
+    setAbortController(controller)
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : '发送消息失败'
     error.value = errorMsg
-    isLoading.value = false
-    streamingContent.value = ''
+    setLoading(false)
+    setStreamingContent('')
   }
 }
 
 // Handle session selection from sidebar
 const handleSelectSession = async (session: ChatSession) => {
   try {
-    // 如果有正在进行的流式请求，先停止它
-    if (abortController) {
-      abortController.abort()
-      abortController = null
-    }
-    
-    // 清除当前的流式内容和加载状态
-    streamingContent.value = ''
-    isLoading.value = false
+    // 不停止流，只是切换会话视图
+    // 每个会话有独立的流式状态
     error.value = ''
     
     // Load full session data
@@ -709,7 +773,6 @@ const handleSelectSession = async (session: ChatSession) => {
       }
       
       error.value = ''
-      streamingContent.value = ''
     }
   } catch (err) {
     console.error('加载会话失败:', err)
@@ -719,36 +782,54 @@ const handleSelectSession = async (session: ChatSession) => {
 
 // Handle new session from sidebar
 const handleNewSessionFromSidebar = () => {
-  // 如果有正在进行的流式请求，先停止它
-  if (abortController) {
-    abortController.abort()
-    abortController = null
-  }
+  // 新会话不需要停止其他会话的流式请求
+  // 每个会话有独立的流式状态
   
   currentSession.value = null
   messages.value = []
   error.value = ''
-  streamingContent.value = ''
   inputMessage.value = ''
-  isLoading.value = false
+  
+  // 初始化新会话的流式状态
+  const newSessionId = '__new__'
+  sessionStreamStates.value.set(newSessionId, {
+    isLoading: false,
+    streamingContent: '',
+    abortController: null
+  })
 }
 
 // Handle session deleted from sidebar
 const handleSessionDeleted = (sessionId: string) => {
+  // 停止被删除会话的流式请求
+  const state = sessionStreamStates.value.get(sessionId)
+  if (state?.abortController) {
+    state.abortController.abort()
+  }
+  // 清理该会话的流式状态
+  sessionStreamStates.value.delete(sessionId)
+  
   if (currentSession.value?.id === sessionId) {
     currentSession.value = null
     messages.value = []
     error.value = ''
-    streamingContent.value = ''
   }
 }
 
 // Handle all sessions cleared from sidebar
 const handleAllSessionsCleared = () => {
+  // 停止所有会话的流式请求
+  sessionStreamStates.value.forEach((state) => {
+    if (state.abortController) {
+      state.abortController.abort()
+    }
+  })
+  // 清空所有会话的流式状态
+  sessionStreamStates.value.clear()
+  
   currentSession.value = null
   messages.value = []
   error.value = ''
-  streamingContent.value = ''
 }
 </script>
 
