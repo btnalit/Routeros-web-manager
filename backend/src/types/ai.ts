@@ -355,14 +355,45 @@ export const DEFAULT_ENDPOINTS: Record<AIProvider, string> = {
 };
 
 /**
- * 默认模型列表
+ * 默认模型列表 (2025年1月更新)
  */
 export const DEFAULT_MODELS: Record<AIProvider, string[]> = {
-  [AIProvider.OPENAI]: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-  [AIProvider.GEMINI]: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
-  [AIProvider.DEEPSEEK]: ['deepseek-chat', 'deepseek-coder'],
-  [AIProvider.QWEN]: ['qwen-turbo', 'qwen-plus', 'qwen-max'],
-  [AIProvider.DOUBAO]: ['doubao-pro-32k', 'doubao-lite-32k']
+  [AIProvider.OPENAI]: [
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'o3',
+    'o4-mini'
+  ],
+  [AIProvider.GEMINI]: [
+    'gemini-3-pro',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash'
+  ],
+  [AIProvider.DEEPSEEK]: [
+    'deepseek-chat',
+    'deepseek-reasoner'
+  ],
+  [AIProvider.QWEN]: [
+    'qwen3-max',
+    'qwen3-plus',
+    'qwen3-turbo',
+    'qwen-max',
+    'qwen-plus',
+    'qwen-turbo'
+  ],
+  [AIProvider.DOUBAO]: [
+    'doubao-seed-1-8-251228',
+    'doubao-seed-1.6',
+    'doubao-seed-1.8',
+    'doubao-seed-1.6-thinking',
+    'doubao-seed-1.6-vision',
+    'doubao-seedance-1.0-pro',
+    'doubao-1.5-ui-tars'
+  ]
 };
 
 /**

@@ -217,7 +217,7 @@ export class DoubaoAdapter extends BaseAdapter {
     const url = `${this.endpoint}/chat/completions`;
     
     const body: DoubaoRequest = {
-      model: 'doubao-lite-32k',
+      model: 'doubao-seed-1.6',
       messages: [{ role: 'user', content: 'hi' }],
       max_tokens: 1
     };
