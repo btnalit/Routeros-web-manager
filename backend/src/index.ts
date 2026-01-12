@@ -75,8 +75,33 @@ if (isProduction) {
 }
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info(`Server is running on port ${PORT}`);
 });
+
+// 优雅停止处理
+const gracefulShutdown = (signal: string) => {
+  logger.info(`Received ${signal}, starting graceful shutdown...`);
+  
+  server.close((err) => {
+    if (err) {
+      logger.error('Error during server close:', err);
+      process.exit(1);
+    }
+    
+    logger.info('Server closed successfully');
+    process.exit(0);
+  });
+
+  // 如果 10 秒内没有完成关闭，强制退出
+  setTimeout(() => {
+    logger.warn('Graceful shutdown timeout, forcing exit');
+    process.exit(1);
+  }, 10000);
+};
+
+// 监听终止信号
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;

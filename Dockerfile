@@ -39,6 +39,9 @@ RUN npm run build
 # Stage 3: Production Image
 FROM node:20-alpine AS production
 
+# Install tini for proper signal handling
+RUN apk add --no-cache tini
+
 WORKDIR /app
 
 # Copy backend package files
@@ -70,6 +73,10 @@ EXPOSE 3099
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3099/api/connection/status || exit 1
 
-# Start the application
+# Set stop signal
+STOPSIGNAL SIGTERM
+
+# Start the application with tini as init
 WORKDIR /app/backend
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "dist/index.js"]
