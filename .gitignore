@@ -105,6 +105,9 @@ Thumbs.db
 config/local.json
 config/production.json
 
+# Backend data directory (contains sensitive connection info and history)
+backend/data/*
+!backend/data/.gitkeep
 
 # SSL Certificates (keep .gitkeep)
 certs/*
