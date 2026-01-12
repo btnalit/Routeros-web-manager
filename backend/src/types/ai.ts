@@ -359,6 +359,9 @@ export const DEFAULT_ENDPOINTS: Record<AIProvider, string> = {
  */
 export const DEFAULT_MODELS: Record<AIProvider, string[]> = {
   [AIProvider.OPENAI]: [
+    'gpt-5',
+    'gpt-5-mini',
+    'gpt-5.1',
     'gpt-4.1',
     'gpt-4.1-mini',
     'gpt-4o',
