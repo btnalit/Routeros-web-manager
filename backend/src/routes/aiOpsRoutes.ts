@@ -23,6 +23,8 @@ import {
   // 指标相关
   getLatestMetrics,
   getMetricsHistory,
+  getTrafficHistory,
+  getTrafficInterfaces,
   getMetricsConfig,
   updateMetricsConfig,
   collectMetricsNow,
@@ -99,6 +101,12 @@ router.get('/metrics/latest', getLatestMetrics);
 
 // GET /api/ai-ops/metrics/history - 获取历史指标
 router.get('/metrics/history', getMetricsHistory);
+
+// GET /api/ai-ops/metrics/traffic - 获取流量历史
+router.get('/metrics/traffic', getTrafficHistory);
+
+// GET /api/ai-ops/metrics/traffic/interfaces - 获取可用流量接口列表
+router.get('/metrics/traffic/interfaces', getTrafficInterfaces);
 
 // GET /api/ai-ops/metrics/config - 获取采集配置
 router.get('/metrics/config', getMetricsConfig);

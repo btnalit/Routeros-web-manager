@@ -62,6 +62,15 @@ export interface MetricPoint {
 }
 
 /**
+ * 流量速率数据点
+ */
+export interface TrafficRatePoint {
+  timestamp: number
+  rxRate: number // bytes per second
+  txRate: number // bytes per second
+}
+
+/**
  * 系统指标
  */
 export interface SystemMetrics {
@@ -509,6 +518,21 @@ export const metricsApi = {
     api.get<ApiResponse<MetricPoint[]>>('/ai-ops/metrics/history', {
       params: { metric, from, to }
     }),
+
+  /**
+   * 获取流量历史（从后端内存获取最近 1 小时）
+   */
+  getTrafficHistory: (interfaceName?: string, duration?: number) =>
+    api.get<ApiResponse<Record<string, TrafficRatePoint[]> | TrafficRatePoint[]>>(
+      '/ai-ops/metrics/traffic',
+      { params: { interface: interfaceName, duration } }
+    ),
+
+  /**
+   * 获取可用的流量接口列表
+   */
+  getTrafficInterfaces: () =>
+    api.get<ApiResponse<string[]>>('/ai-ops/metrics/traffic/interfaces'),
 
   /**
    * 获取采集配置

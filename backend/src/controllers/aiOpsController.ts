@@ -81,6 +81,50 @@ export async function getMetricsHistory(req: Request, res: Response): Promise<vo
 }
 
 /**
+ * 获取接口流量历史
+ * GET /api/ai-ops/metrics/traffic
+ */
+export async function getTrafficHistory(req: Request, res: Response): Promise<void> {
+  try {
+    const { interface: interfaceName, duration } = req.query;
+    const durationMs = duration ? parseInt(duration as string, 10) : 3600000; // 默认 1 小时
+
+    if (interfaceName) {
+      // 获取单个接口的流量历史
+      const history = metricsCollector.getTrafficHistory(interfaceName as string, durationMs);
+      res.json({ success: true, data: history });
+    } else {
+      // 获取所有接口的流量历史
+      const history = metricsCollector.getAllTrafficHistory(durationMs);
+      res.json({ success: true, data: history });
+    }
+  } catch (error) {
+    logger.error('Failed to get traffic history:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '获取流量历史失败',
+    });
+  }
+}
+
+/**
+ * 获取可用的流量接口列表
+ * GET /api/ai-ops/metrics/traffic/interfaces
+ */
+export async function getTrafficInterfaces(_req: Request, res: Response): Promise<void> {
+  try {
+    const interfaces = metricsCollector.getAvailableTrafficInterfaces();
+    res.json({ success: true, data: interfaces });
+  } catch (error) {
+    logger.error('Failed to get traffic interfaces:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '获取流量接口列表失败',
+    });
+  }
+}
+
+/**
  * 获取采集配置
  * GET /api/ai-ops/metrics/config
  */

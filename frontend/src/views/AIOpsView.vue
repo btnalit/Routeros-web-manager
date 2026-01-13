@@ -404,14 +404,15 @@ import type { EChartsOption } from 'echarts'
 import {
   dashboardApi,
   schedulerApi,
+  metricsApi,
   type DashboardData,
   type AlertEvent,
   type AlertSeverity,
   type RemediationStatus,
   type ScheduledTask,
-  type InterfaceMetrics
+  type InterfaceMetrics,
+  type TrafficRatePoint
 } from '@/api/ai-ops'
-import { useTrafficCacheStore } from '@/stores/trafficCache'
 
 // Register ECharts components
 use([
@@ -425,9 +426,6 @@ use([
 
 const router = useRouter()
 
-// Traffic cache store (global, persists across page navigation)
-const trafficCacheStore = useTrafficCacheStore()
-
 // State
 const loading = ref(false)
 const error = ref('')
@@ -435,6 +433,7 @@ const dashboardData = ref<DashboardData | null>(null)
 const autoRefresh = ref(true)
 const selectedInterface = ref('')
 const scheduledTasks = ref<ScheduledTask[]>([])
+const trafficData = ref<Record<string, TrafficRatePoint[]>>({})
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 // Computed
@@ -481,9 +480,9 @@ const nextTasks = computed(() => {
     .slice(0, 3)
 })
 
-// Get current interface's traffic history from global cache
+// Get current interface's traffic history from backend
 const trafficHistory = computed(() => {
-  return trafficCacheStore.getTrafficHistory(selectedInterface.value)
+  return trafficData.value[selectedInterface.value] || []
 })
 
 // Traffic Chart Option
@@ -518,7 +517,7 @@ const trafficChartOption = computed<EChartsOption | null>(() => {
     xAxis: {
       type: 'category',
       boundaryGap: false,
-      data: history.map(d => d.time)
+      data: history.map(d => new Date(d.timestamp).toLocaleTimeString('zh-CN', { hour12: false }))
     },
     yAxis: {
       type: 'value',
@@ -542,7 +541,7 @@ const trafficChartOption = computed<EChartsOption | null>(() => {
         itemStyle: {
           color: '#67c23a'
         },
-        data: history.map(d => d.rx)
+        data: history.map(d => d.rxRate)
       },
       {
         name: '发送',
@@ -559,7 +558,7 @@ const trafficChartOption = computed<EChartsOption | null>(() => {
         itemStyle: {
           color: '#409eff'
         },
-        data: history.map(d => d.tx)
+        data: history.map(d => d.txRate)
       }
     ]
   }
@@ -571,9 +570,10 @@ const loadDashboardData = async () => {
   error.value = ''
 
   try {
-    const [dashboardResponse, tasksResponse] = await Promise.all([
+    const [dashboardResponse, tasksResponse, trafficResponse] = await Promise.all([
       dashboardApi.getData(),
-      schedulerApi.getTasks()
+      schedulerApi.getTasks(),
+      metricsApi.getTrafficHistory() // 获取所有接口的流量历史
     ])
 
     if (dashboardResponse.data.success && dashboardResponse.data.data) {
@@ -583,15 +583,17 @@ const loadDashboardData = async () => {
       if (!selectedInterface.value && interfaces.value.length > 0) {
         selectedInterface.value = interfaces.value[0].name
       }
-
-      // Update traffic history for all interfaces
-      updateAllTrafficHistory()
     } else {
       throw new Error(dashboardResponse.data.error || '获取仪表盘数据失败')
     }
 
     if (tasksResponse.data.success && tasksResponse.data.data) {
       scheduledTasks.value = tasksResponse.data.data
+    }
+
+    // 更新流量数据
+    if (trafficResponse.data.success && trafficResponse.data.data) {
+      trafficData.value = trafficResponse.data.data as Record<string, TrafficRatePoint[]>
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : '获取数据失败'
@@ -604,21 +606,8 @@ const loadDashboardData = async () => {
   }
 }
 
-// Update traffic history for ALL interfaces using global cache store
-const updateAllTrafficHistory = () => {
-  // Use the global store to update traffic data for all interfaces
-  trafficCacheStore.updateAllInterfacesTraffic(
-    interfaces.value.map(iface => ({
-      name: iface.name,
-      rxBytes: iface.rxBytes,
-      txBytes: iface.txBytes
-    }))
-  )
-}
-
 const updateTrafficChart = () => {
-  // When switching interfaces, no need to reload - data is already in global cache
-  // The computed property will automatically get the correct data
+  // When switching interfaces, the computed property will automatically get the correct data
 }
 
 // Utility functions
