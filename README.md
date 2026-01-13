@@ -4,6 +4,8 @@
 
 ## 功能特性
 
+### 基础管理
+
 - 🔗 **连接管理** - RouterOS 设备连接配置，支持 API 和 API-SSL 连接，连接信息自动保存
 - 📊 **系统监控** - 实时显示 CPU、内存、磁盘使用率，系统启动时间和运行时长
 - 🌐 **接口管理** - 查看和配置网络接口（启用/禁用/编辑）
@@ -18,32 +20,49 @@
   - DHCP 服务器配置
   - Networks 网络配置
   - Leases 租约管理（支持静态绑定）
-- 🌍 **IPv6 管理** - 完整的 IPv6 网络管理
-  - IPv6 地址管理（增删改查）
-  - DHCPv6 客户端管理（Release/Renew 操作）
-  - 邻居发现（ND）配置
-  - IPv6 邻居表查看（分页显示）
-  - IPv6 路由管理
-  - IPv6 防火墙 Filter 规则管理
-- 🔥 **防火墙管理** - 完整的防火墙规则管理
-  - Filter 过滤规则
-  - NAT 地址转换规则
-  - Mangle 标记规则
-  - Address List 地址列表
-- 🐳 **容器管理** - Docker 容器管理
-  - 容器列表、启动、停止
-  - 容器环境变量配置
-  - 容器挂载点管理
+
+### IPv6 管理
+
+- 🌍 **IPv6 地址管理** - 增删改查
+- 📡 **DHCPv6 客户端** - Release/Renew 操作
+- 🔍 **邻居发现（ND）** - ND 配置管理
+- 📋 **IPv6 邻居表** - 分页显示
+- 🛣️ **IPv6 路由** - 路由管理
+- 🔥 **IPv6 防火墙** - Filter 规则管理
+
+### 防火墙管理
+
+- 🔥 **Filter 规则** - 过滤规则管理
+- 🔄 **NAT 规则** - 地址转换规则
+- 🏷️ **Mangle 规则** - 标记规则
+- 📋 **Address List** - 地址列表管理
+
+### 容器与系统
+
+- 🐳 **容器管理** - Docker 容器管理（启动/停止/环境变量/挂载点）
 - 🧦 **Socksify** - SOCKS5 代理配置管理
-- ⏰ **计划任务** - Scheduler 任务管理（查看/启用/禁用/编辑/删除）
+- ⏰ **计划任务** - Scheduler 任务管理
 - 📜 **脚本管理** - Script 脚本编辑和执行，支持中文注释
 - ⚡ **电源管理** - 系统重启和关机操作（带安全确认）
+
+### AI 智能功能
+
 - 🤖 **AI 智能助手** - 基于大语言模型的 RouterOS 配置助手
-  - 支持多种 AI 服务商（OpenAI、DeepSeek、Gemini、通义千问、llamaO）
+  - 支持多种 AI 服务商（OpenAI、DeepSeek、Gemini、通义千问、llama）
   - 自然语言交互，智能生成 RouterOS 命令
   - 一键执行 AI 生成的命令，结果自动反馈给 AI 分析
   - 会话管理，支持多轮对话和历史记录
   - 流式响应，实时显示 AI 回复
+
+- 🛡️ **AI-Ops 智能运维** - 全方位智能运维平台
+  - **实时监控仪表盘** - CPU、内存、磁盘、接口流量实时监控
+  - **智能告警系统** - 自定义告警规则，支持多级别告警（信息/警告/严重/紧急）
+  - **定时巡检任务** - Cron 表达式调度，自动执行巡检和备份
+  - **配置快照管理** - 自动/手动备份配置，支持差异对比和一键恢复
+  - **健康报告生成** - 自动生成系统健康报告，支持 Markdown/PDF 导出
+  - **故障自愈引擎** - 内置故障模式识别，支持自动修复（PPPoE 断线重连、接口重启等）
+  - **多渠道通知** - 支持 Web 推送、Webhook（企业微信/钉钉/飞书）、邮件通知
+  - **审计日志** - 完整的操作审计记录
 
 ## 技术栈
 
@@ -53,6 +72,7 @@
 - Element Plus UI 组件库
 - Vue Router
 - Pinia 状态管理
+- ECharts 图表库
 - Vite 构建工具
 
 ### 后端
@@ -60,6 +80,8 @@
 - Node.js + Express
 - TypeScript
 - node-routeros（RouterOS API 协议）
+- node-cron（定时任务调度）
+- nodemailer（邮件发送）
 - Winston 日志
 - patch-package（UTF-8 编码支持）
 
@@ -158,7 +180,7 @@ docker run -d \
 
 Docker 部署自动创建数据卷：
 
-- `routeros-web-manager-data`: 连接配置
+- `routeros-web-manager-data`: 连接配置和 AI-Ops 数据
 - `routeros-web-manager-logs`: 日志文件
 
 ### HTTPS 配置
@@ -184,9 +206,12 @@ routeros-web-manager/
 │   │   ├── controllers/     # 控制器
 │   │   ├── routes/          # 路由定义
 │   │   ├── services/        # 业务逻辑
+│   │   │   └── ai-ops/      # AI-Ops 智能运维服务
 │   │   ├── types/           # 类型定义
 │   │   ├── utils/           # 工具函数
 │   │   └── index.ts         # 入口文件
+│   ├── data/                # 数据存储（gitignore）
+│   │   └── ai-ops/          # AI-Ops 运维数据
 │   ├── patches/             # node-routeros UTF-8 补丁
 │   └── package.json
 ├── frontend/                # 前端 Vue 应用
@@ -235,8 +260,6 @@ routeros-web-manager/
 - `GET /api/ip/pools` - IP Pool 列表
 - `GET /api/ip/dhcp-client` - DHCP Client 列表
 - `GET /api/ip/dhcp-server` - DHCP Server 列表
-- `GET /api/ip/dhcp-server/networks` - DHCP Networks 列表
-- `GET /api/ip/dhcp-server/leases` - DHCP Leases 列表
 - `GET /api/ip/socks` - Socksify 列表
 
 ### 防火墙
@@ -251,8 +274,6 @@ routeros-web-manager/
 - `GET /api/container` - 容器列表
 - `POST /api/container/:id/start` - 启动容器
 - `POST /api/container/:id/stop` - 停止容器
-- `GET /api/container/envs` - 环境变量列表
-- `GET /api/container/mounts` - 挂载点列表
 
 ### 系统管理
 
@@ -264,30 +285,38 @@ routeros-web-manager/
 ### IPv6 管理
 
 - `GET /api/ipv6/addresses` - IPv6 地址列表
-- `POST /api/ipv6/addresses` - 添加 IPv6 地址
-- `PATCH /api/ipv6/addresses/:id` - 更新 IPv6 地址
-- `DELETE /api/ipv6/addresses/:id` - 删除 IPv6 地址
 - `GET /api/ipv6/dhcp-client` - DHCPv6 客户端列表
-- `POST /api/ipv6/dhcp-client/:id/release` - 释放 DHCPv6 租约
-- `POST /api/ipv6/dhcp-client/:id/renew` - 续约 DHCPv6 租约
 - `GET /api/ipv6/nd` - ND 配置列表
 - `GET /api/ipv6/neighbors` - IPv6 邻居表
 - `GET /api/ipv6/routes` - IPv6 路由列表
-- `GET /api/ipv6/firewall/filter` - IPv6 防火墙 Filter 规则列表
+- `GET /api/ipv6/firewall/filter` - IPv6 防火墙规则
 
 ### AI 智能助手
 
 - `GET /api/ai/configs` - AI 服务配置列表
 - `POST /api/ai/configs` - 创建 AI 服务配置
-- `PUT /api/ai/configs/:id` - 更新 AI 服务配置
-- `DELETE /api/ai/configs/:id` - 删除 AI 服务配置
 - `GET /api/ai/sessions` - 会话列表
-- `POST /api/ai/sessions` - 创建会话
-- `GET /api/ai/sessions/:id` - 获取会话详情
-- `DELETE /api/ai/sessions/:id` - 删除会话
 - `POST /api/ai/chat/stream` - 流式对话（SSE）
 - `POST /api/ai/scripts/execute` - 执行 RouterOS 命令
-- `POST /api/ai/scripts/validate` - 验证命令语法
+
+### AI-Ops 智能运维
+
+- `GET /api/ai-ops/dashboard` - 运维仪表盘数据
+- `GET /api/ai-ops/metrics/latest` - 最新指标
+- `GET /api/ai-ops/metrics/history` - 历史指标
+- `GET /api/ai-ops/alerts/rules` - 告警规则列表
+- `GET /api/ai-ops/alerts/events` - 告警事件列表
+- `GET /api/ai-ops/alerts/events/active` - 活跃告警
+- `GET /api/ai-ops/scheduler/tasks` - 调度任务列表
+- `GET /api/ai-ops/snapshots` - 配置快照列表
+- `POST /api/ai-ops/snapshots` - 创建快照
+- `GET /api/ai-ops/snapshots/diff` - 快照对比
+- `GET /api/ai-ops/reports` - 健康报告列表
+- `POST /api/ai-ops/reports/generate` - 生成报告
+- `GET /api/ai-ops/patterns` - 故障模式列表
+- `GET /api/ai-ops/remediations` - 修复历史
+- `GET /api/ai-ops/channels` - 通知渠道列表
+- `GET /api/ai-ops/audit` - 审计日志
 
 ## RouterOS 配置
 
@@ -302,6 +331,39 @@ routeros-web-manager/
 
 # 创建 API 用户（建议使用 full 权限组）
 /user add name=api password=yourpassword group=full
+```
+
+## AI-Ops 通知渠道配置
+
+### 企业微信机器人
+
+```json
+{
+  "请求 URL": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=你的机器人key",
+  "请求头": {"Content-Type": "application/json"},
+  "请求体模板": {
+    "msgtype": "markdown",
+    "markdown": {
+      "content": "## 🚨 RouterOS 运维告警\n\n**{{title}}**\n\n{{body}}\n\n---\n> **告警类型**: {{type}}\n> **告警级别**: <font color=\"warning\">{{severity}}</font>\n> **触发时间**: {{timestamp}}"
+    }
+  }
+}
+```
+
+### 钉钉机器人
+
+```json
+{
+  "请求 URL": "https://oapi.dingtalk.com/robot/send?access_token=你的token",
+  "请求头": {"Content-Type": "application/json"},
+  "请求体模板": {
+    "msgtype": "markdown",
+    "markdown": {
+      "title": "{{title}}",
+      "text": "## {{title}}\n\n{{body}}\n\n- 类型: {{type}}\n- 级别: {{severity}}\n- 时间: {{timestamp}}"
+    }
+  }
+}
 ```
 
 ## 中文支持

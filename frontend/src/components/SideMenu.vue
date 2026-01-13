@@ -99,13 +99,45 @@
       <el-menu-item index="/ai/chat">AI 对话</el-menu-item>
       <el-menu-item index="/ai/config">服务配置</el-menu-item>
     </el-sub-menu>
+
+    <el-sub-menu index="ai-ops">
+      <template #title>
+        <el-icon><DataAnalysis /></el-icon>
+        <span>智能运维</span>
+      </template>
+      <el-menu-item index="/ai-ops">运维仪表盘</el-menu-item>
+      <el-sub-menu index="ai-ops-alerts">
+        <template #title>告警管理</template>
+        <el-menu-item index="/ai-ops/alerts">告警事件</el-menu-item>
+        <el-menu-item index="/ai-ops/alerts/rules">告警规则</el-menu-item>
+      </el-sub-menu>
+      <el-sub-menu index="ai-ops-scheduler">
+        <template #title>定时任务</template>
+        <el-menu-item index="/ai-ops/scheduler">任务管理</el-menu-item>
+        <el-menu-item index="/ai-ops/reports">健康报告</el-menu-item>
+      </el-sub-menu>
+      <el-sub-menu index="ai-ops-config">
+        <template #title>配置管理</template>
+        <el-menu-item index="/ai-ops/snapshots">配置快照</el-menu-item>
+        <el-menu-item index="/ai-ops/changes">配置变更</el-menu-item>
+      </el-sub-menu>
+      <el-sub-menu index="ai-ops-fault">
+        <template #title>故障自愈</template>
+        <el-menu-item index="/ai-ops/patterns">故障模式</el-menu-item>
+      </el-sub-menu>
+      <el-sub-menu index="ai-ops-system">
+        <template #title>系统设置</template>
+        <el-menu-item index="/ai-ops/channels">通知渠道</el-menu-item>
+        <el-menu-item index="/ai-ops/audit">审计日志</el-menu-item>
+      </el-sub-menu>
+    </el-sub-menu>
   </el-menu>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Setting, Connection, Monitor, Position, Tools, Odometer, Lock, Box, Share, ChatDotRound } from '@element-plus/icons-vue'
+import { Setting, Connection, Monitor, Position, Tools, Odometer, Lock, Box, Share, ChatDotRound, DataAnalysis } from '@element-plus/icons-vue'
 
 defineProps<{
   collapsed?: boolean
@@ -155,5 +187,19 @@ const activeMenu = computed(() => route.path)
 :deep(.el-menu-item:hover),
 :deep(.el-sub-menu__title:hover) {
   background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Fix menu item group title color in dark background */
+:deep(.el-menu-item-group__title) {
+  color: #bfcbd9 !important;
+  font-size: 13px;
+  font-weight: 500;
+  padding-left: 20px !important;
+  padding-top: 8px;
+  padding-bottom: 4px;
+}
+
+:deep(.el-menu-item-group .el-menu-item) {
+  padding-left: 45px !important;
 }
 </style>

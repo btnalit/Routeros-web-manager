@@ -1,0 +1,319 @@
+/**
+ * AuditLogger 审计日志服务
+ * 负责记录所有自动化操作的审计日志
+ *
+ * Requirements: 10.1, 10.2, 10.3, 10.4, 10.5
+ * - 10.1: 记录脚本执行时间、触发原因、脚本内容和执行结果
+ * - 10.2: 记录配置变更时间和变更内容摘要
+ * - 10.3: 记录告警触发/恢复详情和处理状态
+ * - 10.4: 支持按时间范围、操作类型筛选审计记录
+ * - 10.5: 保留最近 180 天的审计记录，自动清理过期数据
+ */
+
+import fs from 'fs/promises';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { AuditLog, AuditLogQueryOptions, IAuditLogger } from '../../types/ai-ops';
+import { logger } from '../../utils/logger';
+
+const AUDIT_DIR = path.join(process.cwd(), 'data', 'ai-ops', 'audit');
+const DEFAULT_RETENTION_DAYS = 180; // 保留 180 天
+const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 每 24 小时清理一次
+
+/**
+ * 获取日期字符串 (YYYY-MM-DD) - 使用 UTC 时间
+ */
+function getDateString(timestamp: number): string {
+  const date = new Date(timestamp);
+  return date.toISOString().split('T')[0];
+}
+
+/**
+ * 获取日期文件路径
+ */
+function getDateFilePath(dateStr: string): string {
+  return path.join(AUDIT_DIR, `${dateStr}.json`);
+}
+
+/**
+ * 解析日期字符串为时间戳范围
+ */
+function parseDateRange(dateStr: string): { start: number; end: number } {
+  const date = new Date(dateStr);
+  const start = date.getTime();
+  const end = start + 24 * 60 * 60 * 1000 - 1; // 当天最后一毫秒
+  return { start, end };
+}
+
+export class AuditLogger implements IAuditLogger {
+  private cleanupIntervalId: NodeJS.Timeout | null = null;
+  private initialized = false;
+
+  /**
+   * 初始化审计日志服务
+   * 启动时自动清理过期日志，并设置定时清理任务
+   */
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+
+    await this.ensureAuditDir();
+    
+    // 启动时立即清理过期日志
+    const deletedCount = await this.cleanup();
+    if (deletedCount > 0) {
+      logger.info(`Audit logger initialized, cleaned up ${deletedCount} expired records`);
+    } else {
+      logger.info('Audit logger initialized');
+    }
+
+    // 设置定时清理任务（每 24 小时执行一次）
+    this.cleanupIntervalId = setInterval(async () => {
+      try {
+        const count = await this.cleanup();
+        if (count > 0) {
+          logger.info(`Scheduled audit log cleanup: ${count} records deleted`);
+        }
+      } catch (error) {
+        logger.error('Scheduled audit log cleanup failed:', error);
+      }
+    }, CLEANUP_INTERVAL_MS);
+
+    this.initialized = true;
+  }
+
+  /**
+   * 停止审计日志服务
+   */
+  stop(): void {
+    if (this.cleanupIntervalId) {
+      clearInterval(this.cleanupIntervalId);
+      this.cleanupIntervalId = null;
+    }
+    this.initialized = false;
+    logger.info('Audit logger stopped');
+  }
+
+  /**
+   * 确保审计日志目录存在
+   */
+  private async ensureAuditDir(): Promise<void> {
+    try {
+      await fs.access(AUDIT_DIR);
+    } catch {
+      await fs.mkdir(AUDIT_DIR, { recursive: true });
+      logger.info(`Created audit log directory: ${AUDIT_DIR}`);
+    }
+  }
+
+  /**
+   * 读取指定日期的日志文件
+   */
+  private async readDateFile(dateStr: string): Promise<AuditLog[]> {
+    const filePath = getDateFilePath(dateStr);
+    try {
+      const data = await fs.readFile(filePath, 'utf-8');
+      return JSON.parse(data) as AuditLog[];
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return [];
+      }
+      logger.error(`Failed to read audit log file ${dateStr}:`, error);
+      // 文件损坏时返回空数组
+      return [];
+    }
+  }
+
+  /**
+   * 写入指定日期的日志文件
+   */
+  private async writeDateFile(dateStr: string, logs: AuditLog[]): Promise<void> {
+    const filePath = getDateFilePath(dateStr);
+    await fs.writeFile(filePath, JSON.stringify(logs, null, 2), 'utf-8');
+  }
+
+  /**
+   * 获取日期范围内的所有日期字符串 (使用 UTC 时间)
+   */
+  private getDateRange(from: number, to: number): string[] {
+    const dates: string[] = [];
+    
+    // 使用 UTC 时间计算日期范围
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    
+    // 获取 UTC 日期的开始
+    const currentDate = new Date(Date.UTC(
+      fromDate.getUTCFullYear(),
+      fromDate.getUTCMonth(),
+      fromDate.getUTCDate()
+    ));
+    
+    // 获取 UTC 日期的结束
+    const endDate = new Date(Date.UTC(
+      toDate.getUTCFullYear(),
+      toDate.getUTCMonth(),
+      toDate.getUTCDate(),
+      23, 59, 59, 999
+    ));
+
+    while (currentDate <= endDate) {
+      dates.push(getDateString(currentDate.getTime()));
+      currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+    }
+
+    return dates;
+  }
+
+  /**
+   * 列出所有审计日志文件
+   */
+  private async listAuditFiles(): Promise<string[]> {
+    try {
+      await this.ensureAuditDir();
+      const files = await fs.readdir(AUDIT_DIR);
+      return files
+        .filter((f) => f.endsWith('.json') && f !== '.gitkeep')
+        .map((f) => f.replace('.json', ''))
+        .sort();
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 记录审计日志
+   * @param entry 日志条目（不含 id 和 timestamp）
+   * @returns 完整的审计日志条目
+   */
+  async log(entry: Omit<AuditLog, 'id' | 'timestamp'>): Promise<AuditLog> {
+    await this.ensureAuditDir();
+
+    const timestamp = Date.now();
+    const auditLog: AuditLog = {
+      id: uuidv4(),
+      timestamp,
+      ...entry,
+    };
+
+    const dateStr = getDateString(timestamp);
+    const logs = await this.readDateFile(dateStr);
+    logs.push(auditLog);
+    await this.writeDateFile(dateStr, logs);
+
+    logger.debug(`Audit log recorded: ${auditLog.action} by ${auditLog.actor}`);
+    return auditLog;
+  }
+
+  /**
+   * 查询审计日志
+   * @param options 查询选项
+   * @returns 匹配的审计日志列表
+   */
+  async query(options: AuditLogQueryOptions = {}): Promise<AuditLog[]> {
+    await this.ensureAuditDir();
+
+    const { from, to, action, actor, limit } = options;
+
+    logger.info(`Querying audit logs with options: from=${from ? new Date(from).toISOString() : 'undefined'}, to=${to ? new Date(to).toISOString() : 'undefined'}, action=${action}, limit=${limit}`);
+
+    // 确定要查询的日期范围
+    let datesToQuery: string[];
+    if (from !== undefined && to !== undefined) {
+      datesToQuery = this.getDateRange(from, to);
+    } else if (from !== undefined) {
+      datesToQuery = this.getDateRange(from, Date.now());
+    } else if (to !== undefined) {
+      // 默认从 90 天前开始
+      const defaultFrom = to - DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+      datesToQuery = this.getDateRange(defaultFrom, to);
+    } else {
+      // 查询所有文件
+      datesToQuery = await this.listAuditFiles();
+    }
+
+    logger.info(`Dates to query: ${datesToQuery.join(', ')}`);
+
+    // 收集所有匹配的日志
+    let allLogs: AuditLog[] = [];
+
+    for (const dateStr of datesToQuery) {
+      const logs = await this.readDateFile(dateStr);
+      logger.info(`Read ${logs.length} logs from ${dateStr}`);
+      allLogs = allLogs.concat(logs);
+    }
+
+    logger.info(`Total logs before filtering: ${allLogs.length}`);
+
+    // 应用过滤条件
+    let filteredLogs = allLogs;
+
+    if (from !== undefined) {
+      filteredLogs = filteredLogs.filter((log) => log.timestamp >= from);
+    }
+
+    if (to !== undefined) {
+      filteredLogs = filteredLogs.filter((log) => log.timestamp <= to);
+    }
+
+    if (action !== undefined) {
+      filteredLogs = filteredLogs.filter((log) => log.action === action);
+    }
+
+    if (actor !== undefined) {
+      filteredLogs = filteredLogs.filter((log) => log.actor === actor);
+    }
+
+    // 按时间戳降序排序（最新的在前）
+    filteredLogs.sort((a, b) => b.timestamp - a.timestamp);
+
+    // 应用限制
+    if (limit !== undefined && limit > 0) {
+      filteredLogs = filteredLogs.slice(0, limit);
+    }
+
+    return filteredLogs;
+  }
+
+  /**
+   * 清理过期的审计日志
+   * @param retentionDays 保留天数，默认 90 天
+   * @returns 删除的记录数
+   */
+  async cleanup(retentionDays: number = DEFAULT_RETENTION_DAYS): Promise<number> {
+    await this.ensureAuditDir();
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+    cutoffDate.setHours(0, 0, 0, 0);
+    const cutoffDateStr = getDateString(cutoffDate.getTime());
+
+    const files = await this.listAuditFiles();
+    let deletedCount = 0;
+
+    for (const dateStr of files) {
+      if (dateStr < cutoffDateStr) {
+        const filePath = getDateFilePath(dateStr);
+        try {
+          // 先读取文件获取记录数
+          const logs = await this.readDateFile(dateStr);
+          deletedCount += logs.length;
+
+          // 删除文件
+          await fs.unlink(filePath);
+          logger.info(`Deleted expired audit log file: ${dateStr} (${logs.length} records)`);
+        } catch (error) {
+          logger.error(`Failed to delete audit log file ${dateStr}:`, error);
+        }
+      }
+    }
+
+    if (deletedCount > 0) {
+      logger.info(`Audit log cleanup completed: ${deletedCount} records deleted`);
+    }
+
+    return deletedCount;
+  }
+}
+
+// 导出单例实例
+export const auditLogger = new AuditLogger();

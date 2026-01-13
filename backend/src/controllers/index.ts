@@ -11,3 +11,4 @@ export * from './containerController';
 export * from './ipv6Controller';
 export * from './ipv6FirewallController';
 export * from './aiController';
+export * from './aiOpsController';

@@ -109,6 +109,17 @@ config/production.json
 backend/data/*
 !backend/data/.gitkeep
 
+# AI-Ops data directory
+backend/data/ai-ops/*
+!backend/data/ai-ops/.gitkeep
+
 # SSL Certificates (keep .gitkeep)
 certs/*
 !certs/.gitkeep
+
+# Backend logs
+backend/logs/*
+!backend/logs/.gitkeep
+
+# Test files
+backend/test-api.js

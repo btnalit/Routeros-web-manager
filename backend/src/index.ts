@@ -3,7 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { logger } from './utils/logger';
-import { connectionRoutes, interfaceRoutes, ipRoutes, ipv6Routes, systemRoutes, dashboardRoutes, firewallRoutes, containerRoutes, aiRoutes } from './routes';
+import { connectionRoutes, interfaceRoutes, ipRoutes, ipv6Routes, systemRoutes, dashboardRoutes, firewallRoutes, containerRoutes, aiRoutes, aiOpsRoutes } from './routes';
+import { metricsCollector, scheduler, healthReportService, auditLogger } from './services/ai-ops';
 
 // Load environment variables
 dotenv.config();
@@ -44,6 +45,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/firewall', firewallRoutes);
 app.use('/api/container', containerRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/ai-ops', aiOpsRoutes);
 
 // Error handling middleware
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
@@ -77,11 +79,67 @@ if (isProduction) {
 // Start server
 const server = app.listen(PORT, () => {
   logger.info(`Server is running on port ${PORT}`);
+  
+  // 初始化 AI-Ops 服务
+  initializeAiOpsServices();
 });
 
+/**
+ * 初始化 AI-Ops 智能运维服务
+ * Requirements: 1.1, 4.1, 5.1
+ */
+async function initializeAiOpsServices(): Promise<void> {
+  try {
+    logger.info('Initializing AI-Ops services...');
+    
+    // 初始化审计日志服务（包含自动清理过期日志）
+    await auditLogger.initialize();
+    logger.info('AuditLogger initialized');
+    
+    // 启动指标采集器
+    await metricsCollector.start();
+    logger.info('MetricsCollector started');
+    
+    // 注册健康报告生成任务处理器
+    scheduler.registerHandler('health-report', async (task) => {
+      const config = task.config || {};
+      const { from, to, channelIds } = config as { from?: number; to?: number; channelIds?: string[] };
+      const now = Date.now();
+      const reportFrom = from || now - 24 * 60 * 60 * 1000; // 默认过去24小时
+      const reportTo = to || now;
+      
+      if (channelIds && channelIds.length > 0) {
+        return await healthReportService.generateAndSendReport(reportFrom, reportTo, channelIds);
+      } else {
+        return await healthReportService.generateReport(reportFrom, reportTo);
+      }
+    });
+    logger.info('Health report handler registered');
+    
+    // 启动调度器
+    await scheduler.start();
+    logger.info('Scheduler started');
+    
+    logger.info('AI-Ops services initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize AI-Ops services:', error);
+  }
+}
+
 // 优雅停止处理
-const gracefulShutdown = (signal: string) => {
+const gracefulShutdown = async (signal: string) => {
   logger.info(`Received ${signal}, starting graceful shutdown...`);
+  
+  // 停止 AI-Ops 服务
+  try {
+    logger.info('Stopping AI-Ops services...');
+    await scheduler.stop();
+    await metricsCollector.stop();
+    auditLogger.stop();
+    logger.info('AI-Ops services stopped');
+  } catch (error) {
+    logger.error('Error stopping AI-Ops services:', error);
+  }
   
   server.close((err) => {
     if (err) {

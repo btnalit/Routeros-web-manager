@@ -176,6 +176,67 @@ const routes: RouteRecordRaw[] = [
         name: 'AIConfig',
         component: () => import('@/views/AIConfigView.vue'),
         meta: { title: 'AI 服务配置' }
+      },
+      // AI-Ops routes
+      {
+        path: 'ai-ops',
+        name: 'AIOps',
+        component: () => import('@/views/AIOpsView.vue'),
+        meta: { title: '智能运维仪表盘' }
+      },
+      {
+        path: 'ai-ops/alerts',
+        name: 'AlertEvents',
+        component: () => import('@/views/AlertEventsView.vue'),
+        meta: { title: '告警事件' }
+      },
+      {
+        path: 'ai-ops/alerts/rules',
+        name: 'AlertRules',
+        component: () => import('@/views/AlertRulesView.vue'),
+        meta: { title: '告警规则' }
+      },
+      {
+        path: 'ai-ops/scheduler',
+        name: 'AIOpsScheduler',
+        component: () => import('@/views/AIOpsSchedulerView.vue'),
+        meta: { title: '定时任务' }
+      },
+      {
+        path: 'ai-ops/snapshots',
+        name: 'Snapshots',
+        component: () => import('@/views/SnapshotsView.vue'),
+        meta: { title: '配置快照' }
+      },
+      {
+        path: 'ai-ops/changes',
+        name: 'ConfigChanges',
+        component: () => import('@/views/ConfigChangesView.vue'),
+        meta: { title: '配置变更' }
+      },
+      {
+        path: 'ai-ops/reports',
+        name: 'HealthReports',
+        component: () => import('@/views/HealthReportsView.vue'),
+        meta: { title: '健康报告' }
+      },
+      {
+        path: 'ai-ops/patterns',
+        name: 'FaultPatterns',
+        component: () => import('@/views/FaultPatternsView.vue'),
+        meta: { title: '故障自愈' }
+      },
+      {
+        path: 'ai-ops/channels',
+        name: 'NotificationChannels',
+        component: () => import('@/views/NotificationChannelsView.vue'),
+        meta: { title: '通知渠道' }
+      },
+      {
+        path: 'ai-ops/audit',
+        name: 'AuditLog',
+        component: () => import('@/views/AuditLogView.vue'),
+        meta: { title: '审计日志' }
       }
     ]
   },
@@ -188,6 +249,16 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+// Global error handler for navigation failures
+router.onError((error) => {
+  console.error('Router error:', error)
+  // If it's a chunk loading error, try to reload the page
+  if (error.message.includes('Failed to fetch dynamically imported module') ||
+      error.message.includes('Loading chunk')) {
+    window.location.reload()
+  }
 })
 
 export default router

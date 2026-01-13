@@ -1,0 +1,299 @@
+/**
+ * AI-Ops Routes
+ * 定义 AI-Ops 智能运维相关的路由
+ *
+ * 路由分组：
+ * - /api/ai-ops/metrics - 指标采集管理
+ * - /api/ai-ops/alerts/rules - 告警规则管理
+ * - /api/ai-ops/alerts/events - 告警事件管理
+ * - /api/ai-ops/scheduler - 调度器任务管理
+ * - /api/ai-ops/snapshots - 配置快照管理
+ * - /api/ai-ops/reports - 健康报告管理
+ * - /api/ai-ops/patterns - 故障模式管理
+ * - /api/ai-ops/remediations - 修复记录管理
+ * - /api/ai-ops/channels - 通知渠道管理
+ * - /api/ai-ops/audit - 审计日志查询
+ * - /api/ai-ops/dashboard - 运维仪表盘
+ *
+ * Requirements: 1.1-10.6
+ */
+
+import { Router } from 'express';
+import {
+  // 指标相关
+  getLatestMetrics,
+  getMetricsHistory,
+  getMetricsConfig,
+  updateMetricsConfig,
+  collectMetricsNow,
+  // 告警规则相关
+  getAlertRules,
+  getAlertRuleById,
+  createAlertRule,
+  updateAlertRule,
+  deleteAlertRule,
+  enableAlertRule,
+  disableAlertRule,
+  // 告警事件相关
+  getAlertEvents,
+  getActiveAlerts,
+  getAlertEventById,
+  resolveAlertEvent,
+  // 调度器相关
+  getSchedulerTasks,
+  getSchedulerTaskById,
+  createSchedulerTask,
+  updateSchedulerTask,
+  deleteSchedulerTask,
+  runSchedulerTaskNow,
+  getSchedulerExecutions,
+  // 配置快照相关
+  getSnapshots,
+  getSnapshotById,
+  createSnapshot,
+  deleteSnapshot,
+  downloadSnapshot,
+  restoreSnapshot,
+  compareSnapshots,
+  getLatestDiff,
+  getChangeTimeline,
+  // 健康报告相关
+  getReports,
+  getReportById,
+  generateReport,
+  exportReport,
+  deleteReport,
+  // 故障模式相关
+  getFaultPatterns,
+  getFaultPatternById,
+  createFaultPattern,
+  updateFaultPattern,
+  deleteFaultPattern,
+  enableAutoHeal,
+  disableAutoHeal,
+  getRemediations,
+  getRemediationById,
+  executeFaultRemediation,
+  // 通知渠道相关
+  getNotificationChannels,
+  getNotificationChannelById,
+  createNotificationChannel,
+  updateNotificationChannel,
+  deleteNotificationChannel,
+  testNotificationChannel,
+  getPendingNotifications,
+  getNotificationHistory,
+  // 审计日志
+  getAuditLogs,
+  // 仪表盘
+  getDashboardData,
+} from '../controllers/aiOpsController';
+
+const router = Router();
+
+
+// ==================== 指标管理 ====================
+
+// GET /api/ai-ops/metrics/latest - 获取最新指标
+router.get('/metrics/latest', getLatestMetrics);
+
+// GET /api/ai-ops/metrics/history - 获取历史指标
+router.get('/metrics/history', getMetricsHistory);
+
+// GET /api/ai-ops/metrics/config - 获取采集配置
+router.get('/metrics/config', getMetricsConfig);
+
+// PUT /api/ai-ops/metrics/config - 更新采集配置
+router.put('/metrics/config', updateMetricsConfig);
+
+// POST /api/ai-ops/metrics/collect - 立即采集指标
+router.post('/metrics/collect', collectMetricsNow);
+
+
+// ==================== 告警规则管理 ====================
+
+// GET /api/ai-ops/alerts/rules - 获取告警规则列表
+router.get('/alerts/rules', getAlertRules);
+
+// GET /api/ai-ops/alerts/rules/:id - 获取单个告警规则
+router.get('/alerts/rules/:id', getAlertRuleById);
+
+// POST /api/ai-ops/alerts/rules - 创建告警规则
+router.post('/alerts/rules', createAlertRule);
+
+// PUT /api/ai-ops/alerts/rules/:id - 更新告警规则
+router.put('/alerts/rules/:id', updateAlertRule);
+
+// DELETE /api/ai-ops/alerts/rules/:id - 删除告警规则
+router.delete('/alerts/rules/:id', deleteAlertRule);
+
+// POST /api/ai-ops/alerts/rules/:id/enable - 启用告警规则
+router.post('/alerts/rules/:id/enable', enableAlertRule);
+
+// POST /api/ai-ops/alerts/rules/:id/disable - 禁用告警规则
+router.post('/alerts/rules/:id/disable', disableAlertRule);
+
+
+// ==================== 告警事件管理 ====================
+
+// GET /api/ai-ops/alerts/events/active - 获取活跃告警（放在 :id 路由之前）
+router.get('/alerts/events/active', getActiveAlerts);
+
+// GET /api/ai-ops/alerts/events - 获取告警事件列表
+router.get('/alerts/events', getAlertEvents);
+
+// GET /api/ai-ops/alerts/events/:id - 获取单个告警事件
+router.get('/alerts/events/:id', getAlertEventById);
+
+// POST /api/ai-ops/alerts/events/:id/resolve - 解决告警
+router.post('/alerts/events/:id/resolve', resolveAlertEvent);
+
+
+// ==================== 调度器任务管理 ====================
+
+// GET /api/ai-ops/scheduler/executions - 获取执行历史（放在 tasks/:id 之前）
+router.get('/scheduler/executions', getSchedulerExecutions);
+
+// GET /api/ai-ops/scheduler/tasks - 获取任务列表
+router.get('/scheduler/tasks', getSchedulerTasks);
+
+// GET /api/ai-ops/scheduler/tasks/:id - 获取单个任务
+router.get('/scheduler/tasks/:id', getSchedulerTaskById);
+
+// POST /api/ai-ops/scheduler/tasks - 创建任务
+router.post('/scheduler/tasks', createSchedulerTask);
+
+// PUT /api/ai-ops/scheduler/tasks/:id - 更新任务
+router.put('/scheduler/tasks/:id', updateSchedulerTask);
+
+// DELETE /api/ai-ops/scheduler/tasks/:id - 删除任务
+router.delete('/scheduler/tasks/:id', deleteSchedulerTask);
+
+// POST /api/ai-ops/scheduler/tasks/:id/run - 立即执行任务
+router.post('/scheduler/tasks/:id/run', runSchedulerTaskNow);
+
+
+// ==================== 配置快照管理 ====================
+
+// GET /api/ai-ops/snapshots/diff/latest - 获取最新差异（放在 :id 路由之前）
+router.get('/snapshots/diff/latest', getLatestDiff);
+
+// GET /api/ai-ops/snapshots/diff - 对比快照
+router.get('/snapshots/diff', compareSnapshots);
+
+// GET /api/ai-ops/snapshots/timeline - 获取变更时间线
+router.get('/snapshots/timeline', getChangeTimeline);
+
+// GET /api/ai-ops/snapshots - 获取快照列表
+router.get('/snapshots', getSnapshots);
+
+// GET /api/ai-ops/snapshots/:id - 获取单个快照
+router.get('/snapshots/:id', getSnapshotById);
+
+// POST /api/ai-ops/snapshots - 创建快照
+router.post('/snapshots', createSnapshot);
+
+// DELETE /api/ai-ops/snapshots/:id - 删除快照
+router.delete('/snapshots/:id', deleteSnapshot);
+
+// GET /api/ai-ops/snapshots/:id/download - 下载快照
+router.get('/snapshots/:id/download', downloadSnapshot);
+
+// POST /api/ai-ops/snapshots/:id/restore - 恢复快照
+router.post('/snapshots/:id/restore', restoreSnapshot);
+
+
+// ==================== 健康报告管理 ====================
+
+// POST /api/ai-ops/reports/generate - 生成报告（放在 :id 路由之前）
+router.post('/reports/generate', generateReport);
+
+// GET /api/ai-ops/reports - 获取报告列表
+router.get('/reports', getReports);
+
+// GET /api/ai-ops/reports/:id - 获取单个报告
+router.get('/reports/:id', getReportById);
+
+// GET /api/ai-ops/reports/:id/export - 导出报告
+router.get('/reports/:id/export', exportReport);
+
+// DELETE /api/ai-ops/reports/:id - 删除报告
+router.delete('/reports/:id', deleteReport);
+
+
+// ==================== 故障模式管理 ====================
+
+// GET /api/ai-ops/patterns - 获取故障模式列表
+router.get('/patterns', getFaultPatterns);
+
+// GET /api/ai-ops/patterns/:id - 获取单个故障模式
+router.get('/patterns/:id', getFaultPatternById);
+
+// POST /api/ai-ops/patterns - 创建故障模式
+router.post('/patterns', createFaultPattern);
+
+// PUT /api/ai-ops/patterns/:id - 更新故障模式
+router.put('/patterns/:id', updateFaultPattern);
+
+// DELETE /api/ai-ops/patterns/:id - 删除故障模式
+router.delete('/patterns/:id', deleteFaultPattern);
+
+// POST /api/ai-ops/patterns/:id/enable-auto-heal - 启用自动修复
+router.post('/patterns/:id/enable-auto-heal', enableAutoHeal);
+
+// POST /api/ai-ops/patterns/:id/disable-auto-heal - 禁用自动修复
+router.post('/patterns/:id/disable-auto-heal', disableAutoHeal);
+
+// POST /api/ai-ops/patterns/:id/execute - 手动执行修复
+router.post('/patterns/:id/execute', executeFaultRemediation);
+
+
+// ==================== 修复记录管理 ====================
+
+// GET /api/ai-ops/remediations - 获取修复历史
+router.get('/remediations', getRemediations);
+
+// GET /api/ai-ops/remediations/:id - 获取单个修复记录
+router.get('/remediations/:id', getRemediationById);
+
+
+// ==================== 通知渠道管理 ====================
+
+// GET /api/ai-ops/notifications/history - 获取通知历史（放在 channels 路由之前）
+router.get('/notifications/history', getNotificationHistory);
+
+// GET /api/ai-ops/channels - 获取渠道列表
+router.get('/channels', getNotificationChannels);
+
+// GET /api/ai-ops/channels/:id - 获取单个渠道
+router.get('/channels/:id', getNotificationChannelById);
+
+// POST /api/ai-ops/channels - 创建渠道
+router.post('/channels', createNotificationChannel);
+
+// PUT /api/ai-ops/channels/:id - 更新渠道
+router.put('/channels/:id', updateNotificationChannel);
+
+// DELETE /api/ai-ops/channels/:id - 删除渠道
+router.delete('/channels/:id', deleteNotificationChannel);
+
+// POST /api/ai-ops/channels/:id/test - 测试渠道
+router.post('/channels/:id/test', testNotificationChannel);
+
+// GET /api/ai-ops/channels/:id/pending - 获取待推送通知
+router.get('/channels/:id/pending', getPendingNotifications);
+
+
+// ==================== 审计日志 ====================
+
+// GET /api/ai-ops/audit - 查询审计日志
+router.get('/audit', getAuditLogs);
+
+
+// ==================== 运维仪表盘 ====================
+
+// GET /api/ai-ops/dashboard - 获取仪表盘数据
+router.get('/dashboard', getDashboardData);
+
+
+export default router;

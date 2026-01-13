@@ -10,3 +10,4 @@ export { default as dashboardRoutes } from './dashboardRoutes';
 export { default as firewallRoutes } from './firewallRoutes';
 export { default as containerRoutes } from './containerRoutes';
 export { default as aiRoutes } from './aiRoutes';
+export { default as aiOpsRoutes } from './aiOpsRoutes';
