@@ -14,9 +14,10 @@ export interface InterfaceBytesSnapshot {
 }
 
 // Cache configuration
-const MAX_HISTORY_POINTS = 30 // Maximum data points per interface
+const MAX_HISTORY_POINTS = 120 // Maximum data points per interface (1 hour = 120 × 30s)
 const MAX_INTERFACES = 20 // Maximum interfaces to cache
-const CACHE_EXPIRY_MS = 5 * 60 * 1000 // 5 minutes cache expiry
+const CACHE_EXPIRY_MS = 10 * 60 * 1000 // 10 minutes cache expiry
+const MAX_TIME_DIFF_SECONDS = 90 // Maximum time diff for rate calculation
 
 export const useTrafficCacheStore = defineStore('trafficCache', () => {
   // Traffic history for each interface (keyed by interface name)
@@ -66,18 +67,35 @@ export const useTrafficCacheStore = defineStore('trafficCache', () => {
       const ifaceName = iface.name
       const prevBytes = previousBytesMap.value.get(ifaceName)
 
+      // Get or create history array for this interface
+      let history = trafficHistoryMap.value.get(ifaceName)
+      if (!history) {
+        history = []
+        trafficHistoryMap.value.set(ifaceName, history)
+      }
+
       // Calculate rate (bytes per second) from difference
       if (prevBytes) {
         const timeDiff = (now - prevBytes.timestamp) / 1000 // seconds
-        if (timeDiff > 0 && timeDiff < 60) { // Only calculate if reasonable time diff
-          const rxRate = Math.max(0, (iface.rxBytes - prevBytes.rx) / timeDiff)
-          const txRate = Math.max(0, (iface.txBytes - prevBytes.tx) / timeDiff)
-
-          // Get or create history array for this interface
-          let history = trafficHistoryMap.value.get(ifaceName)
-          if (!history) {
-            history = []
-            trafficHistoryMap.value.set(ifaceName, history)
+        if (timeDiff > 0 && timeDiff < MAX_TIME_DIFF_SECONDS) {
+          // Check for counter reset (new value smaller than previous)
+          const rxDiff = iface.rxBytes - prevBytes.rx
+          const txDiff = iface.txBytes - prevBytes.tx
+          
+          let rxRate = 0
+          let txRate = 0
+          
+          if (rxDiff >= 0 && txDiff >= 0) {
+            // Normal case: calculate rate
+            rxRate = rxDiff / timeDiff
+            txRate = txDiff / timeDiff
+          } else {
+            // Counter reset detected: use previous value if available
+            const lastPoint = history.length > 0 ? history[history.length - 1] : null
+            if (lastPoint) {
+              rxRate = lastPoint.rx
+              txRate = lastPoint.tx
+            }
           }
 
           history.push({

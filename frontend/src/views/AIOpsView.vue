@@ -531,11 +531,13 @@ const trafficChartOption = computed<EChartsOption | null>(() => {
         name: '接收',
         type: 'line',
         smooth: true,
+        showSymbol: false,
         areaStyle: {
           opacity: 0.3
         },
         lineStyle: {
-          color: '#67c23a'
+          color: '#67c23a',
+          width: 2
         },
         itemStyle: {
           color: '#67c23a'
@@ -546,11 +548,13 @@ const trafficChartOption = computed<EChartsOption | null>(() => {
         name: '发送',
         type: 'line',
         smooth: true,
+        showSymbol: false,
         areaStyle: {
           opacity: 0.3
         },
         lineStyle: {
-          color: '#409eff'
+          color: '#409eff',
+          width: 2
         },
         itemStyle: {
           color: '#409eff'
