@@ -85,6 +85,11 @@ export interface MetricsCollectorConfig {
 // ==================== 告警类型 ====================
 
 /**
+ * 接口状态目标值
+ */
+export type InterfaceStatusTarget = 'up' | 'down';
+
+/**
  * 告警规则
  */
 export interface AlertRule {
@@ -95,6 +100,7 @@ export interface AlertRule {
   metricLabel?: string;       // 如接口名称
   operator: AlertOperator;
   threshold: number;
+  targetStatus?: InterfaceStatusTarget;  // 接口状态目标值（仅用于 interface_status 类型）
   duration: number;           // 持续触发次数
   cooldownMs: number;         // 冷却时间
   severity: AlertSeverity;
@@ -642,7 +648,7 @@ export interface INotificationService {
  * 审计日志服务接口
  */
 export interface IAuditLogger {
-  log(entry: Omit<AuditLog, 'id' | 'timestamp'>): Promise<AuditLog>;
+  log(entry: Omit<AuditLog, 'id' | 'timestamp'>): Promise<AuditLog | null>;
   query(options: AuditLogQueryOptions): Promise<AuditLog[]>;
   cleanup(retentionDays: number): Promise<number>;  // 返回删除的记录数
 }

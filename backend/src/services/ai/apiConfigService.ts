@@ -86,14 +86,22 @@ export class APIConfigService implements IAPIConfigService {
       const data = await fs.readFile(AI_DATA_FILE, 'utf-8');
       const parsed = JSON.parse(data) as AIAgentData;
       
+      // 确保所有必要的字段都存在
+      const result: AIAgentData = {
+        apiConfigs: parsed.apiConfigs || [],
+        sessions: parsed.sessions || [],
+        scriptHistory: parsed.scriptHistory || [],
+        settings: parsed.settings || { ...DEFAULT_SETTINGS },
+      };
+      
       // 转换日期字符串为 Date 对象
-      parsed.apiConfigs = parsed.apiConfigs.map(config => ({
+      result.apiConfigs = result.apiConfigs.map(config => ({
         ...config,
         createdAt: new Date(config.createdAt),
         updatedAt: new Date(config.updatedAt),
       }));
       
-      return parsed;
+      return result;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         logger.info('No AI agent data file found, using defaults');

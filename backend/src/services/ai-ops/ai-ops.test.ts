@@ -67,11 +67,12 @@ describe('AuditLogger', () => {
 
       const result = await auditLogger.log(entry);
 
-      expect(result.id).toBeDefined();
-      expect(result.timestamp).toBeDefined();
-      expect(result.action).toBe('script_execute');
-      expect(result.actor).toBe('system');
-      expect(result.details.trigger).toBe('test');
+      expect(result).not.toBeNull();
+      expect(result!.id).toBeDefined();
+      expect(result!.timestamp).toBeDefined();
+      expect(result!.action).toBe('script_execute');
+      expect(result!.actor).toBe('system');
+      expect(result!.details.trigger).toBe('test');
     });
 
     it('should persist audit log to file', async () => {
@@ -86,11 +87,30 @@ describe('AuditLogger', () => {
 
       const result = await auditLogger.log(entry);
       
+      expect(result).not.toBeNull();
+      
       // 查询刚创建的日志
       const logs = await auditLogger.query({ limit: 1 });
       
       expect(logs.length).toBeGreaterThan(0);
-      expect(logs[0].id).toBe(result.id);
+      expect(logs[0].id).toBe(result!.id);
+    });
+
+    it('should filter out read-only actions and return null', async () => {
+      // 测试只读操作不记录审计日志
+      const readOnlyEntry = {
+        action: 'snapshot_view' as any,  // 只读操作
+        actor: 'user' as const,
+        details: {
+          trigger: 'view',
+          metadata: { snapshotId: 'test-id' },
+        },
+      };
+
+      const result = await auditLogger.log(readOnlyEntry);
+      
+      // 只读操作应返回 null
+      expect(result).toBeNull();
     });
   });
 

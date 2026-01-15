@@ -54,7 +54,12 @@
         <el-table-column label="条件" width="180">
           <template #default="{ row }">
             <span class="condition-text">
-              {{ getOperatorText(row.operator) }} {{ row.threshold }}{{ getMetricUnit(row.metric) }}
+              <template v-if="row.metric === 'interface_status'">
+                目标状态: {{ row.targetStatus === 'down' ? '断开' : '连接' }}
+              </template>
+              <template v-else>
+                {{ getOperatorText(row.operator) }} {{ row.threshold }}{{ getMetricUnit(row.metric) }}
+              </template>
             </span>
           </template>
         </el-table-column>
@@ -143,54 +148,148 @@
           <el-input v-model="formData.name" placeholder="请输入规则名称" />
         </el-form-item>
 
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="指标类型" prop="metric">
-              <el-select v-model="formData.metric" placeholder="选择指标" style="width: 100%">
-                <el-option
-                  v-for="item in metricOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item
-              v-if="needsMetricLabel"
-              label="接口名称"
-              prop="metricLabel"
+        <!-- 指标类型选择 -->
+        <el-form-item label="指标类型" prop="metric">
+          <el-select v-model="formData.metric" placeholder="选择指标" style="width: 100%">
+            <el-option
+              v-for="item in metricOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
             >
-              <el-input v-model="formData.metricLabel" placeholder="如 ether1" />
-            </el-form-item>
-          </el-col>
-        </el-row>
+              <div class="metric-option">
+                <span class="metric-option-label">{{ item.label }}</span>
+                <span class="metric-option-unit" v-if="item.unit">({{ item.unit }})</span>
+              </div>
+            </el-option>
+          </el-select>
+        </el-form-item>
 
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="运算符" prop="operator">
-              <el-select v-model="formData.operator" placeholder="选择运算符" style="width: 100%">
-                <el-option
-                  v-for="item in operatorOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
+        <!-- 指标说明提示 -->
+        <el-alert
+          v-if="currentMetricInfo"
+          :title="currentMetricInfo.description"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 18px"
+        >
+          <template #default>
+            <div class="metric-hint">
+              <el-icon><InfoFilled /></el-icon>
+              <span>{{ currentMetricInfo.example }}</span>
+            </div>
+          </template>
+        </el-alert>
+
+        <!-- 接口名称（仅接口相关指标显示） -->
+        <el-form-item
+          v-if="needsMetricLabel"
+          label="接口名称"
+          prop="metricLabel"
+        >
+          <el-input 
+            v-model="formData.metricLabel" 
+            placeholder="如 ether1, lan01, bridge1"
+          >
+            <template #prepend>
+              <el-icon><Connection /></el-icon>
+            </template>
+          </el-input>
+          <div class="form-item-tip">
+            请输入 RouterOS 中的接口名称，可在「接口管理」页面查看
+          </div>
+        </el-form-item>
+
+        <!-- 接口状态类型：目标状态选择 -->
+        <el-form-item
+          v-if="isInterfaceStatus"
+          label="触发条件"
+          prop="targetStatus"
+        >
+          <el-radio-group v-model="formData.targetStatus" class="status-radio-group">
+            <el-radio-button
+              v-for="item in interfaceStatusOptions"
+              :key="item.value"
+              :value="item.value"
+            >
+              <div class="status-option">
+                <el-icon v-if="item.value === 'down'" color="#f56c6c"><CircleClose /></el-icon>
+                <el-icon v-else color="#67c23a"><CircleCheck /></el-icon>
+                <span>{{ item.label }}</span>
+              </div>
+            </el-radio-button>
+          </el-radio-group>
+          <div class="form-item-tip">
+            {{ interfaceStatusOptions.find(o => o.value === formData.targetStatus)?.description }}
+          </div>
+        </el-form-item>
+
+        <!-- 数值型指标：运算符和阈值 -->
+        <template v-if="!isInterfaceStatus">
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="运算符" prop="operator">
+                <el-select v-model="formData.operator" placeholder="选择运算符" style="width: 100%">
+                  <el-option
+                    v-for="item in operatorOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="阈值" prop="threshold">
+                <el-input-number
+                  v-model="formData.threshold"
+                  :min="0"
+                  :precision="2"
+                  style="width: 100%"
+                  :placeholder="getThresholdPlaceholder()"
                 />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="阈值" prop="threshold">
-              <el-input-number
-                v-model="formData.threshold"
-                :min="0"
-                :precision="2"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
+                <template #label>
+                  <span>阈值</span>
+                  <span class="threshold-unit" v-if="currentMetricInfo?.unit">
+                    ({{ currentMetricInfo.unit }})
+                  </span>
+                </template>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <!-- 流量阈值参考 -->
+          <el-alert
+            v-if="isInterfaceTraffic"
+            title="流量阈值参考"
+            type="warning"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 18px"
+          >
+            <template #default>
+              <div class="traffic-reference">
+                <div class="traffic-item">
+                  <span class="traffic-label">100 KB/s</span>
+                  <span class="traffic-desc">≈ 0.1 MB/s，适合低流量接口</span>
+                </div>
+                <div class="traffic-item">
+                  <span class="traffic-label">1024 KB/s</span>
+                  <span class="traffic-desc">≈ 1 MB/s，适合普通接口</span>
+                </div>
+                <div class="traffic-item">
+                  <span class="traffic-label">10240 KB/s</span>
+                  <span class="traffic-desc">≈ 10 MB/s，适合高速接口</span>
+                </div>
+                <div class="traffic-item">
+                  <span class="traffic-label">102400 KB/s</span>
+                  <span class="traffic-desc">≈ 100 MB/s，适合千兆接口</span>
+                </div>
+              </div>
+            </template>
+          </el-alert>
+        </template>
 
         <el-row :gutter="20">
           <el-col :span="12">
@@ -201,28 +300,42 @@
                 :max="100"
                 style="width: 100%"
               />
+              <div class="form-item-tip">
+                连续满足条件的采集次数（采集间隔约 60 秒）
+              </div>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="冷却时间" prop="cooldownMs">
-              <el-input-number
-                v-model="formData.cooldownMs"
-                :min="0"
-                :step="60000"
-                style="width: 100%"
-              >
-                <template #append>毫秒</template>
-              </el-input-number>
+              <el-select v-model="formData.cooldownMs" style="width: 100%">
+                <el-option :value="0" label="无冷却" />
+                <el-option :value="60000" label="1 分钟" />
+                <el-option :value="300000" label="5 分钟" />
+                <el-option :value="600000" label="10 分钟" />
+                <el-option :value="1800000" label="30 分钟" />
+                <el-option :value="3600000" label="1 小时" />
+              </el-select>
+              <div class="form-item-tip">
+                告警触发后的静默时间，避免重复告警
+              </div>
             </el-form-item>
           </el-col>
         </el-row>
 
         <el-form-item label="严重级别" prop="severity">
-          <el-radio-group v-model="formData.severity">
-            <el-radio value="info">信息</el-radio>
-            <el-radio value="warning">警告</el-radio>
-            <el-radio value="critical">严重</el-radio>
-            <el-radio value="emergency">紧急</el-radio>
+          <el-radio-group v-model="formData.severity" class="severity-radio-group">
+            <el-radio-button value="info">
+              <el-icon><InfoFilled /></el-icon> 信息
+            </el-radio-button>
+            <el-radio-button value="warning">
+              <el-icon><WarningFilled /></el-icon> 警告
+            </el-radio-button>
+            <el-radio-button value="critical">
+              <el-icon><CircleCloseFilled /></el-icon> 严重
+            </el-radio-button>
+            <el-radio-button value="emergency">
+              <el-icon><Bell /></el-icon> 紧急
+            </el-radio-button>
           </el-radio-group>
         </el-form-item>
 
@@ -243,6 +356,9 @@
               <el-tag size="small" style="margin-left: 8px">{{ getChannelTypeText(channel.type) }}</el-tag>
             </el-option>
           </el-select>
+          <div class="form-item-tip" v-if="notificationChannels.length === 0">
+            暂无通知渠道，请先在「通知渠道」页面创建
+          </div>
         </el-form-item>
 
         <el-form-item label="启用状态">
@@ -260,8 +376,11 @@
             v-model="formData.autoResponse!.script"
             type="textarea"
             :rows="4"
-            placeholder="输入 RouterOS 脚本"
+            placeholder="输入 RouterOS 脚本，告警触发时自动执行"
           />
+          <div class="form-item-tip">
+            示例：/interface enable ether1
+          </div>
         </el-form-item>
       </el-form>
 
@@ -284,8 +403,15 @@
         <el-descriptions-item label="规则名称" :span="2">{{ selectedRule.name }}</el-descriptions-item>
         <el-descriptions-item label="指标类型">{{ getMetricText(selectedRule.metric) }}</el-descriptions-item>
         <el-descriptions-item label="接口名称">{{ selectedRule.metricLabel || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="运算符">{{ getOperatorText(selectedRule.operator) }}</el-descriptions-item>
-        <el-descriptions-item label="阈值">{{ selectedRule.threshold }}{{ getMetricUnit(selectedRule.metric) }}</el-descriptions-item>
+        <el-descriptions-item label="运算符">{{ selectedRule.metric === 'interface_status' ? '-' : getOperatorText(selectedRule.operator) }}</el-descriptions-item>
+        <el-descriptions-item label="阈值/目标状态">
+          <template v-if="selectedRule.metric === 'interface_status'">
+            {{ selectedRule.targetStatus === 'down' ? '接口断开 (down)' : '接口连接 (up)' }}
+          </template>
+          <template v-else>
+            {{ selectedRule.threshold }}{{ getMetricUnit(selectedRule.metric) }}
+          </template>
+        </el-descriptions-item>
         <el-descriptions-item label="持续次数">{{ selectedRule.duration }} 次</el-descriptions-item>
         <el-descriptions-item label="冷却时间">{{ formatCooldown(selectedRule.cooldownMs) }}</el-descriptions-item>
         <el-descriptions-item label="严重级别">
@@ -337,7 +463,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Plus, Bell } from '@element-plus/icons-vue'
+import { Refresh, Plus, Bell, InfoFilled, WarningFilled, CircleCloseFilled, CircleClose, CircleCheck, Connection } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import {
   alertRulesApi,
@@ -383,6 +509,7 @@ const getDefaultFormData = (): CreateAlertRuleInput => ({
   metricLabel: '',
   operator: 'gt',
   threshold: 80,
+  targetStatus: 'down',
   duration: 3,
   cooldownMs: 300000,
   severity: 'warning',
@@ -395,27 +522,40 @@ const getDefaultFormData = (): CreateAlertRuleInput => ({
 
 const formData = reactive<CreateAlertRuleInput>(getDefaultFormData())
 
-// Form validation rules
-const formRules: FormRules = {
-  name: [
-    { required: true, message: '请输入规则名称', trigger: 'blur' },
-    { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
-  ],
-  metric: [{ required: true, message: '请选择指标类型', trigger: 'change' }],
-  operator: [{ required: true, message: '请选择运算符', trigger: 'change' }],
-  threshold: [{ required: true, message: '请输入阈值', trigger: 'blur' }],
-  duration: [{ required: true, message: '请输入持续次数', trigger: 'blur' }],
-  cooldownMs: [{ required: true, message: '请输入冷却时间', trigger: 'blur' }],
-  severity: [{ required: true, message: '请选择严重级别', trigger: 'change' }]
-}
+// Form validation rules - 动态根据指标类型调整
+const formRules = computed<FormRules>(() => {
+  const isInterfaceStatusType = formData.metric === 'interface_status'
+  
+  const baseRules: FormRules = {
+    name: [
+      { required: true, message: '请输入规则名称', trigger: 'blur' },
+      { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
+    ],
+    metric: [{ required: true, message: '请选择指标类型', trigger: 'change' }],
+    duration: [{ required: true, message: '请输入持续次数', trigger: 'blur' }],
+    cooldownMs: [{ required: true, message: '请输入冷却时间', trigger: 'blur' }],
+    severity: [{ required: true, message: '请选择严重级别', trigger: 'change' }]
+  }
+  
+  if (isInterfaceStatusType) {
+    // 接口状态类型：要求 targetStatus，不要求 threshold 和 operator
+    baseRules.targetStatus = [{ required: true, message: '请选择目标状态', trigger: 'change' }]
+  } else {
+    // 数值型指标：要求 threshold 和 operator
+    baseRules.operator = [{ required: true, message: '请选择运算符', trigger: 'change' }]
+    baseRules.threshold = [{ required: true, message: '请输入阈值', trigger: 'blur' }]
+  }
+  
+  return baseRules
+})
 
-// Options
+// Options - 指标类型选项，包含详细说明
 const metricOptions = [
-  { value: 'cpu', label: 'CPU 使用率' },
-  { value: 'memory', label: '内存使用率' },
-  { value: 'disk', label: '磁盘使用率' },
-  { value: 'interface_status', label: '接口状态' },
-  { value: 'interface_traffic', label: '接口流量' }
+  { value: 'cpu', label: 'CPU 使用率', unit: '%', description: '设备 CPU 使用百分比，范围 0-100', example: '阈值 80 表示 CPU 超过 80% 时触发' },
+  { value: 'memory', label: '内存使用率', unit: '%', description: '设备内存使用百分比，范围 0-100', example: '阈值 90 表示内存超过 90% 时触发' },
+  { value: 'disk', label: '磁盘使用率', unit: '%', description: '设备磁盘使用百分比，范围 0-100', example: '阈值 85 表示磁盘超过 85% 时触发' },
+  { value: 'interface_status', label: '接口状态', unit: '', description: '监控网络接口的连接状态 (up/down)', example: '当接口断开时触发告警' },
+  { value: 'interface_traffic', label: '接口流量', unit: 'KB/s', description: '接口的收发流量速率总和 (KB/s)', example: '阈值 1024 表示流量超过 1 MB/s 时触发' }
 ]
 
 const operatorOptions = [
@@ -427,10 +567,27 @@ const operatorOptions = [
   { value: 'ne', label: '不等于 (!=)' }
 ]
 
+// 接口状态目标选项
+const interfaceStatusOptions = [
+  { value: 'down', label: '接口断开时告警', description: '当接口状态变为 down 时触发告警' },
+  { value: 'up', label: '接口连接时告警', description: '当接口状态变为 up 时触发告警（较少使用）' }
+]
+
+// 获取当前选中指标的详细信息
+const currentMetricInfo = computed(() => {
+  return metricOptions.find(m => m.value === formData.metric)
+})
+
+// 是否为接口流量类型
+const isInterfaceTraffic = computed(() => formData.metric === 'interface_traffic')
+
 // Computed
 const needsMetricLabel = computed(() => {
   return formData.metric === 'interface_status' || formData.metric === 'interface_traffic'
 })
+
+// 计算属性：是否为接口状态类型
+const isInterfaceStatus = computed(() => formData.metric === 'interface_status')
 
 // Load data on mount
 onMounted(() => {
@@ -490,6 +647,7 @@ const editRule = (rule: AlertRule) => {
     metricLabel: rule.metricLabel || '',
     operator: rule.operator,
     threshold: rule.threshold,
+    targetStatus: rule.targetStatus || 'down',
     duration: rule.duration,
     cooldownMs: rule.cooldownMs,
     severity: rule.severity,
@@ -547,7 +705,9 @@ const submitForm = async () => {
   try {
     const data: CreateAlertRuleInput = {
       ...formData,
-      metricLabel: needsMetricLabel.value ? formData.metricLabel : undefined
+      metricLabel: needsMetricLabel.value ? formData.metricLabel : undefined,
+      // 接口状态类型时包含 targetStatus，否则不包含
+      targetStatus: isInterfaceStatus.value ? formData.targetStatus : undefined
     }
 
     if (isEditing.value && editingRuleId.value) {
@@ -597,7 +757,7 @@ const getMetricUnit = (metric: MetricType): string => {
     return '%'
   }
   if (metric === 'interface_traffic') {
-    return ' B/s'
+    return ' KB/s'
   }
   return ''
 }
@@ -657,6 +817,20 @@ const formatCooldown = (ms: number): string => {
   if (ms < 3600000) return `${ms / 60000} 分钟`
   return `${ms / 3600000} 小时`
 }
+
+// 获取阈值输入框的占位符
+const getThresholdPlaceholder = (): string => {
+  switch (formData.metric) {
+    case 'cpu':
+    case 'memory':
+    case 'disk':
+      return '0-100'
+    case 'interface_traffic':
+      return 'KB/s'
+    default:
+      return ''
+  }
+}
 </script>
 
 
@@ -711,6 +885,93 @@ const formatCooldown = (ms: number): string => {
   color: #606266;
 }
 
+/* Form styles */
+.form-item-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.threshold-unit {
+  font-size: 12px;
+  color: #909399;
+  margin-left: 4px;
+}
+
+/* Metric option in select */
+.metric-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.metric-option-label {
+  font-weight: 500;
+}
+
+.metric-option-unit {
+  color: #909399;
+  font-size: 12px;
+}
+
+/* Metric hint */
+.metric-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #606266;
+}
+
+/* Status radio group */
+.status-radio-group {
+  width: 100%;
+}
+
+.status-radio-group .el-radio-button {
+  flex: 1;
+}
+
+.status-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+/* Severity radio group */
+.severity-radio-group .el-radio-button__inner {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Traffic reference */
+.traffic-reference {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.traffic-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.traffic-label {
+  font-weight: 600;
+  color: #303133;
+  font-family: monospace;
+}
+
+.traffic-desc {
+  font-size: 11px;
+  color: #909399;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .page-header {
@@ -721,6 +982,10 @@ const formatCooldown = (ms: number): string => {
   .header-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+
+  .traffic-reference {
+    grid-template-columns: 1fr;
   }
 }
 

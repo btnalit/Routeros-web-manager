@@ -28,3 +28,13 @@ export { FaultHealer, faultHealer } from './faultHealer';
 
 // AI 分析服务
 export { AIAnalyzer, aiAnalyzer } from './aiAnalyzer';
+
+// 巡检处理器
+export {
+  executeInspection,
+  analyzeIssues,
+  registerInspectionHandler,
+  initializeInspectionHandler,
+  type InspectionResult,
+  type InspectionIssue,
+} from './inspectionHandler';

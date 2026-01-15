@@ -152,7 +152,14 @@
           <el-input v-model="leaseForm['mac-address']" placeholder="如: AA:BB:CC:DD:EE:FF" />
         </el-form-item>
         <el-form-item label="服务器">
-          <el-input v-model="leaseForm.server" />
+          <el-select v-model="leaseForm.server" placeholder="自动选择" clearable style="width: 100%">
+            <el-option
+              v-for="server in servers"
+              :key="server['.id']"
+              :label="server.name"
+              :value="server.name"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="leaseForm.comment" />
@@ -361,7 +368,11 @@ const deleteNetwork = async (row: any) => {
 }
 
 // Lease functions
-const showLeaseDialog = (row?: any) => {
+const showLeaseDialog = async (row?: any) => {
+  // 确保 servers 数据已加载，用于服务器下拉选择
+  if (servers.value.length === 0) {
+    await fetchServers()
+  }
   leaseIsEdit.value = !!row
   leaseEditingId.value = row?.['.id'] || ''
   leaseForm.value = {

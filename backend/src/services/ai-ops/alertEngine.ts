@@ -36,11 +36,13 @@ import {
   AlertOperator,
   MetricType,
   AlertSeverity,
+  InterfaceStatusTarget,
 } from '../../types/ai-ops';
 import { logger } from '../../utils/logger';
 import { auditLogger } from './auditLogger';
 import { notificationService } from './notificationService';
 import { routerosClient } from '../routerosClient';
+import { metricsCollector } from './metricsCollector';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'ai-ops');
 const ALERTS_DIR = path.join(DATA_DIR, 'alerts');
@@ -331,7 +333,57 @@ export class AlertEngine implements IAlertEngine {
     await this.updateRule(id, { enabled: false });
     // 清理触发状态
     this.triggerStates.delete(id);
+    
+    // 自动解决该规则的所有活跃告警
+    await this.resolveAlertsForRule(id, 'rule_disabled');
+    
     logger.info(`Disabled alert rule: ${id}`);
+  }
+
+  /**
+   * 解决指定规则的所有活跃告警
+   * @param ruleId 规则 ID
+   * @param reason 解决原因
+   */
+  private async resolveAlertsForRule(ruleId: string, reason: string): Promise<void> {
+    const now = Date.now();
+    const alertsToResolve: AlertEvent[] = [];
+
+    // 找出该规则的所有活跃告警
+    for (const [eventId, event] of this.activeAlerts) {
+      if (event.ruleId === ruleId && event.status === 'active') {
+        alertsToResolve.push(event);
+      }
+    }
+
+    // 解决这些告警
+    for (const event of alertsToResolve) {
+      event.status = 'resolved';
+      event.resolvedAt = now;
+
+      await this.saveEvent(event);
+      this.activeAlerts.delete(event.id);
+
+      // 记录审计日志
+      await auditLogger.log({
+        action: 'alert_resolve',
+        actor: 'system',
+        details: {
+          trigger: reason,
+          metadata: {
+            eventId: event.id,
+            ruleId: event.ruleId,
+            ruleName: event.ruleName,
+          },
+        },
+      });
+
+      logger.info(`Alert auto-resolved due to ${reason}: ${event.ruleName} (${event.id})`);
+    }
+
+    if (alertsToResolve.length > 0) {
+      logger.info(`Resolved ${alertsToResolve.length} active alerts for rule ${ruleId} (reason: ${reason})`);
+    }
   }
 
 
@@ -383,15 +435,68 @@ export class AlertEngine implements IAlertEngine {
         return iface.status === 'up' ? 1 : 0;
       }
       case 'interface_traffic': {
-        if (!metricLabel) return null;
-        const iface = metrics.interfaces.find((i) => i.name === metricLabel);
-        if (!iface) return null;
-        // 返回总流量（字节）
-        return iface.rxBytes + iface.txBytes;
+        if (!metricLabel) {
+          logger.warn('[interface_traffic] metricLabel is required but not provided');
+          return null;
+        }
+        // 获取最近的流量速率数据（最近 30 秒的平均值）
+        const trafficHistory = metricsCollector.getTrafficHistory(metricLabel, 30000);
+        if (trafficHistory.length === 0) {
+          // 如果没有速率数据，尝试获取更长时间范围的数据
+          const extendedHistory = metricsCollector.getTrafficHistory(metricLabel, 120000); // 2分钟
+          if (extendedHistory.length === 0) {
+            // 检查接口是否存在于可用列表中
+            const availableInterfaces = metricsCollector.getAvailableTrafficInterfaces();
+            if (!availableInterfaces.includes(metricLabel)) {
+              logger.warn(`[interface_traffic] Interface "${metricLabel}" not found in available interfaces: [${availableInterfaces.join(', ')}]`);
+            } else {
+              logger.debug(`[interface_traffic] No traffic rate data yet for interface ${metricLabel}, waiting for data collection`);
+            }
+            return null;
+          }
+          // 使用扩展时间范围的数据
+          const avgRate = extendedHistory.reduce((sum, p) => sum + p.rxRate + p.txRate, 0) / extendedHistory.length;
+          return avgRate / 1024;
+        }
+        // 计算平均速率（rx + tx，单位：bytes/s）
+        const avgRate = trafficHistory.reduce((sum, p) => sum + p.rxRate + p.txRate, 0) / trafficHistory.length;
+        // 转换为 KB/s 以便更合理的阈值设置
+        return avgRate / 1024;
       }
       default:
         return null;
     }
+  }
+
+  /**
+   * 获取接口状态字符串
+   */
+  private getInterfaceStatus(
+    metrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] },
+    metricLabel?: string
+  ): InterfaceStatusTarget | null {
+    if (!metricLabel) return null;
+    const iface = metrics.interfaces.find((i) => i.name === metricLabel);
+    if (!iface) return null;
+    return iface.status as InterfaceStatusTarget;
+  }
+
+  /**
+   * 评估接口状态条件
+   * 当接口当前状态等于目标状态时返回 true（触发告警）
+   * 
+   * 逻辑说明：
+   * - targetStatus: 'down' 表示"当接口断开时触发告警"
+   * - targetStatus: 'up' 表示"当接口连接时触发告警"（较少使用）
+   * - 所以当 currentStatus === targetStatus 时应该触发告警
+   */
+  private evaluateInterfaceStatus(
+    currentStatus: InterfaceStatusTarget,
+    targetStatus: InterfaceStatusTarget
+  ): boolean {
+    // 当前状态等于目标状态时触发告警
+    // 例如：targetStatus='down' 且 currentStatus='down' 时触发
+    return currentStatus === targetStatus;
   }
 
   /**
@@ -443,6 +548,9 @@ export class AlertEngine implements IAlertEngine {
     const triggeredEvents: AlertEvent[] = [];
     const now = Date.now();
 
+    // 添加调试日志：显示当前评估的规则数量
+    logger.info(`Alert evaluation started: ${this.rules.length} rules to evaluate`);
+
     // 检查告警恢复
     await this.checkAlertRecovery(metrics);
 
@@ -456,15 +564,46 @@ export class AlertEngine implements IAlertEngine {
         continue;
       }
 
-      // 获取指标值
-      const value = this.getMetricValue(metrics, rule.metric, rule.metricLabel);
-      if (value === null) {
-        logger.debug(`Could not get metric value for rule ${rule.name}`);
-        continue;
-      }
+      let conditionMet = false;
+      let currentValue = 0;
 
-      // 评估条件
-      const conditionMet = this.evaluateCondition(value, rule.operator, rule.threshold);
+      // 根据指标类型选择不同的评估逻辑
+      if (rule.metric === 'interface_status') {
+        // 接口状态类型：使用状态匹配而非数值比较
+        const currentStatus = this.getInterfaceStatus(metrics, rule.metricLabel);
+        if (currentStatus === null) {
+          logger.warn(`[interface_status] Rule ${rule.name}: Could not get interface status for ${rule.metricLabel}`);
+          continue;
+        }
+        
+        // 如果没有配置 targetStatus，默认为 'down'（即当接口 down 时触发告警）
+        const targetStatus = rule.targetStatus || 'down';
+        conditionMet = this.evaluateInterfaceStatus(currentStatus, targetStatus);
+        // 用于告警事件记录：1 表示 up，0 表示 down
+        currentValue = currentStatus === 'up' ? 1 : 0;
+        
+        // 添加详细日志
+        logger.info(`[interface_status] Rule ${rule.name}: interface=${rule.metricLabel}, currentStatus=${currentStatus}, targetStatus=${targetStatus}, conditionMet=${conditionMet}`);
+      } else if (rule.metric === 'interface_traffic') {
+        // 接口流量类型：添加详细日志
+        const value = this.getMetricValue(metrics, rule.metric, rule.metricLabel);
+        if (value === null) {
+          logger.warn(`[interface_traffic] Rule ${rule.name}: Could not get traffic value for ${rule.metricLabel}`);
+          continue;
+        }
+        currentValue = value;
+        conditionMet = this.evaluateCondition(value, rule.operator, rule.threshold);
+        logger.info(`[interface_traffic] Rule ${rule.name}: interface=${rule.metricLabel}, currentValue=${value.toFixed(2)} KB/s, threshold=${rule.threshold}, conditionMet=${conditionMet}`);
+      } else {
+        // 数值型指标：使用数值比较
+        const value = this.getMetricValue(metrics, rule.metric, rule.metricLabel);
+        if (value === null) {
+          logger.debug(`Could not get metric value for rule ${rule.name}`);
+          continue;
+        }
+        currentValue = value;
+        conditionMet = this.evaluateCondition(value, rule.operator, rule.threshold);
+      }
       
       // 更新触发状态
       const state = this.updateTriggerState(rule.id, conditionMet);
@@ -478,7 +617,7 @@ export class AlertEngine implements IAlertEngine {
 
         if (!existingAlert) {
           // 创建新告警
-          const event = await this.createAlertEvent(rule, value, metrics.system);
+          const event = await this.createAlertEvent(rule, currentValue, metrics.system);
           triggeredEvents.push(event);
 
           // 更新规则最后触发时间
@@ -592,9 +731,18 @@ export class AlertEngine implements IAlertEngine {
     };
 
     const metric = metricText[rule.metric] || rule.metric;
-    const operator = operatorText[rule.operator] || rule.operator;
     const label = rule.metricLabel ? ` (${rule.metricLabel})` : '';
 
+    // 接口状态类型使用不同的消息格式
+    if (rule.metric === 'interface_status') {
+      const currentStatus = currentValue === 1 ? 'up' : 'down';
+      const targetStatus = rule.targetStatus || 'up';
+      const targetStatusText = targetStatus === 'up' ? '连接' : '断开';
+      const currentStatusText = currentStatus === 'up' ? '连接' : '断开';
+      return `${metric}${label} 当前状态为 ${currentStatusText}，期望状态为 ${targetStatusText}`;
+    }
+
+    const operator = operatorText[rule.operator] || rule.operator;
     return `${metric}${label} 当前值 ${currentValue} ${operator} 阈值 ${rule.threshold}`;
   }
 
@@ -675,12 +823,66 @@ export class AlertEngine implements IAlertEngine {
         continue;
       }
 
-      // 获取当前指标值
-      const currentValue = this.getMetricValue(metrics, rule.metric, rule.metricLabel);
-      if (currentValue === null) continue;
+      // 如果规则已禁用，自动解决告警（不发送恢复通知）
+      if (!rule.enabled) {
+        event.status = 'resolved';
+        event.resolvedAt = now;
 
-      // 检查条件是否仍然满足
-      const conditionMet = this.evaluateCondition(currentValue, rule.operator, rule.threshold);
+        await this.saveEvent(event);
+        this.activeAlerts.delete(eventId);
+
+        // 记录审计日志
+        await auditLogger.log({
+          action: 'alert_resolve',
+          actor: 'system',
+          details: {
+            trigger: 'rule_disabled',
+            metadata: {
+              eventId: event.id,
+              ruleId: rule.id,
+              ruleName: rule.name,
+            },
+          },
+        });
+
+        logger.info(`Alert auto-resolved (rule disabled): ${rule.name} (${eventId})`);
+        continue;
+      }
+
+      let conditionMet = false;
+
+      // 根据指标类型选择不同的评估逻辑
+      if (rule.metric === 'interface_status') {
+        // 接口状态类型：使用状态匹配
+        const currentStatus = this.getInterfaceStatus(metrics, rule.metricLabel);
+        if (currentStatus === null) {
+          logger.debug(`[recovery] Could not get interface status for ${rule.metricLabel}, skipping recovery check`);
+          continue;
+        }
+        
+        // 重要：恢复检查时使用与触发时相同的 targetStatus 默认值 'down'
+        // 这样当接口从 down 恢复到 up 时，conditionMet 会变为 false，触发恢复
+        const targetStatus = rule.targetStatus || 'down';
+        conditionMet = this.evaluateInterfaceStatus(currentStatus, targetStatus);
+        
+        logger.debug(`[recovery] Rule ${rule.name}: interface=${rule.metricLabel}, currentStatus=${currentStatus}, targetStatus=${targetStatus}, conditionMet=${conditionMet}`);
+      } else if (rule.metric === 'interface_traffic') {
+        // 接口流量类型：使用数值比较
+        const currentValue = this.getMetricValue(metrics, rule.metric, rule.metricLabel);
+        if (currentValue === null) {
+          logger.debug(`[recovery] Could not get traffic value for ${rule.metricLabel}, skipping recovery check`);
+          continue;
+        }
+        
+        conditionMet = this.evaluateCondition(currentValue, rule.operator, rule.threshold);
+        logger.debug(`[recovery] Rule ${rule.name}: interface=${rule.metricLabel}, currentValue=${currentValue.toFixed(2)} KB/s, threshold=${rule.threshold}, conditionMet=${conditionMet}`);
+      } else {
+        // 数值型指标：使用数值比较
+        const currentValue = this.getMetricValue(metrics, rule.metric, rule.metricLabel);
+        if (currentValue === null) continue;
+        
+        conditionMet = this.evaluateCondition(currentValue, rule.operator, rule.threshold);
+      }
 
       if (!conditionMet) {
         // 条件不再满足，告警恢复

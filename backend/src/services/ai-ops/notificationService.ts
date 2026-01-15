@@ -36,6 +36,34 @@ const NOTIFICATIONS_DIR = path.join(DATA_DIR, 'notifications');
 const RETRY_DELAYS = [1000, 5000, 30000]; // 1s, 5s, 30s
 const MAX_RETRIES = 3;
 
+// 时区配置（默认北京时间 UTC+8）
+const DEFAULT_TIMEZONE_OFFSET = 8;
+
+/**
+ * 格式化时间戳为指定时区时间
+ * @param timestamp 时间戳（毫秒）
+ * @param timezoneOffset 时区偏移量（小时），默认为 8（北京时间）
+ * @returns 格式化后的时间字符串 "YYYY-MM-DD HH:mm:ss"
+ */
+export function formatBeijingTime(
+  timestamp: number,
+  timezoneOffset: number = DEFAULT_TIMEZONE_OFFSET
+): string {
+  const date = new Date(timestamp);
+  // 转换为指定时区时间
+  const offsetMs = timezoneOffset * 60 * 60 * 1000;
+  const targetTime = new Date(date.getTime() + offsetMs);
+
+  const year = targetTime.getUTCFullYear();
+  const month = String(targetTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(targetTime.getUTCDate()).padStart(2, '0');
+  const hours = String(targetTime.getUTCHours()).padStart(2, '0');
+  const minutes = String(targetTime.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(targetTime.getUTCSeconds()).padStart(2, '0');
+
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
 // Web Push 订阅存储（内存中，实际应用中应持久化）
 const webPushSubscriptions: Map<string, unknown[]> = new Map();
 
@@ -57,12 +85,17 @@ function getNotificationFilePath(dateStr: string): string {
 /**
  * 替换模板变量
  * 支持 {{variable}} 格式的变量替换
+ * {{timestamp}} 变量会自动转换为北京时间格式 "YYYY-MM-DD HH:mm:ss"
  */
 function replaceTemplateVariables(
   template: string,
   data: Record<string, unknown>
 ): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+    // 特殊处理 timestamp 变量，使用北京时间格式
+    if (key === 'timestamp') {
+      return formatBeijingTime(Date.now());
+    }
     const value = data[key];
     if (value === undefined) return match;
     if (typeof value === 'object') return JSON.stringify(value);

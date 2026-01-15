@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { logger } from './utils/logger';
 import { connectionRoutes, interfaceRoutes, ipRoutes, ipv6Routes, systemRoutes, dashboardRoutes, firewallRoutes, containerRoutes, aiRoutes, aiOpsRoutes } from './routes';
-import { metricsCollector, scheduler, healthReportService, auditLogger } from './services/ai-ops';
+import { metricsCollector, scheduler, healthReportService, auditLogger, initializeInspectionHandler, alertEngine } from './services/ai-ops';
 
 // Load environment variables
 dotenv.config();
@@ -96,6 +96,24 @@ async function initializeAiOpsServices(): Promise<void> {
     await auditLogger.initialize();
     logger.info('AuditLogger initialized');
     
+    // 初始化告警引擎
+    await alertEngine.initialize();
+    logger.info('AlertEngine initialized');
+    
+    // 注册告警评估回调到指标采集器
+    // 每次采集完指标后自动评估告警规则
+    metricsCollector.registerAlertEvaluationCallback(async (metrics) => {
+      try {
+        const triggeredAlerts = await alertEngine.evaluate(metrics);
+        if (triggeredAlerts.length > 0) {
+          logger.info(`Periodic alert evaluation triggered ${triggeredAlerts.length} alerts`);
+        }
+      } catch (error) {
+        logger.error('Periodic alert evaluation failed:', error);
+      }
+    });
+    logger.info('Alert evaluation callback registered to MetricsCollector');
+    
     // 启动指标采集器
     await metricsCollector.start();
     logger.info('MetricsCollector started');
@@ -115,6 +133,10 @@ async function initializeAiOpsServices(): Promise<void> {
       }
     });
     logger.info('Health report handler registered');
+    
+    // 注册巡检任务处理器
+    initializeInspectionHandler();
+    logger.info('Inspection handler registered');
     
     // 启动调度器
     await scheduler.start();

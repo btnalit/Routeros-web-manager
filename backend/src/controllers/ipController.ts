@@ -16,6 +16,7 @@ const IP_DHCP_SERVER_PATH = '/ip/dhcp-server';
 const IP_DHCP_SERVER_NETWORK_PATH = '/ip/dhcp-server/network';
 const IP_DHCP_SERVER_LEASE_PATH = '/ip/dhcp-server/lease';
 const IP_SOCKS_PATH = '/ip/socks';
+const IP_ARP_PATH = '/ip/arp';
 
 // ==================== IP Address 相关 ====================
 
@@ -779,15 +780,28 @@ export async function getAllDhcpLeases(_req: Request, res: Response): Promise<vo
 /**
  * 添加 DHCP Server Lease (静态绑定)
  * POST /api/ip/dhcp-server/leases
+ * 当未指定 server 时，自动获取第一个可用的 DHCP Server 名称
  */
 export async function addDhcpLease(req: Request, res: Response): Promise<void> {
   try {
-    const leaseData = req.body;
+    const leaseData = { ...req.body };
     
     if (!leaseData.address || !leaseData['mac-address']) {
       res.status(400).json({ success: false, error: '缺少必填字段：address, mac-address' });
       return;
     }
+
+    // 如果未指定 server，获取第一个 DHCP Server 的名称
+    if (!leaseData.server) {
+      const servers = await routerosClient.print<any>(IP_DHCP_SERVER_PATH);
+      if (servers.length > 0) {
+        leaseData.server = servers[0].name;
+        logger.info(`Auto-selected DHCP server: ${leaseData.server}`);
+      }
+    }
+
+    // 移除 dynamic 字段，静态绑定不需要此字段
+    delete leaseData.dynamic;
 
     const newLease = await routerosClient.add<any>(IP_DHCP_SERVER_LEASE_PATH, leaseData);
     res.status(201).json({ success: true, data: newLease, message: 'DHCP Lease 已添加' });
@@ -851,6 +865,7 @@ export async function deleteDhcpLease(req: Request, res: Response): Promise<void
 /**
  * 将动态 Lease 转为静态
  * POST /api/ip/dhcp-server/leases/:id/make-static
+ * 使用 RouterOS 的 make-static 命令而非设置 dynamic 参数
  */
 export async function makeDhcpLeaseStatic(req: Request, res: Response): Promise<void> {
   try {
@@ -860,7 +875,8 @@ export async function makeDhcpLeaseStatic(req: Request, res: Response): Promise<
       return;
     }
 
-    await routerosClient.set<any>(IP_DHCP_SERVER_LEASE_PATH, id, { dynamic: 'false' });
+    // 使用 RouterOS 的 make-static 命令
+    await routerosClient.executeRaw('/ip/dhcp-server/lease/make-static', [`=.id=${id}`]);
     res.json({ success: true, message: 'DHCP Lease 已转为静态' });
   } catch (error) {
     logger.error('Failed to make DHCP lease static:', error);
@@ -1005,6 +1021,93 @@ export async function disableSocks(req: Request, res: Response): Promise<void> {
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : '禁用 Socks 失败',
+    });
+  }
+}
+
+
+// ==================== ARP 相关 ====================
+
+/**
+ * 获取所有 ARP 条目
+ * GET /api/ip/arp
+ */
+export async function getAllArp(_req: Request, res: Response): Promise<void> {
+  try {
+    const arpEntries = await routerosClient.print<any>(IP_ARP_PATH);
+    res.json({ success: true, data: arpEntries });
+  } catch (error) {
+    logger.error('Failed to get ARP entries:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '获取 ARP 列表失败',
+    });
+  }
+}
+
+/**
+ * 添加静态 ARP 绑定
+ * POST /api/ip/arp
+ */
+export async function addArp(req: Request, res: Response): Promise<void> {
+  try {
+    const arpData = req.body;
+
+    if (!arpData.address || !arpData['mac-address']) {
+      res.status(400).json({ success: false, error: '缺少必填字段：address, mac-address' });
+      return;
+    }
+
+    // 验证 IP 地址格式
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipRegex.test(arpData.address)) {
+      res.status(400).json({
+        success: false,
+        error: 'IP 地址格式无效，请使用正确格式（如 192.168.1.1）',
+      });
+      return;
+    }
+
+    // 验证 MAC 地址格式
+    const macRegex = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
+    if (!macRegex.test(arpData['mac-address'])) {
+      res.status(400).json({
+        success: false,
+        error: 'MAC 地址格式无效，请使用正确格式（如 AA:BB:CC:DD:EE:FF）',
+      });
+      return;
+    }
+
+    const newArp = await routerosClient.add<any>(IP_ARP_PATH, arpData);
+    res.status(201).json({ success: true, data: newArp, message: 'ARP 条目已添加' });
+  } catch (error) {
+    logger.error('Failed to add ARP entry:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '添加 ARP 条目失败',
+    });
+  }
+}
+
+/**
+ * 删除 ARP 条目
+ * DELETE /api/ip/arp/:id
+ */
+export async function deleteArp(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      res.status(400).json({ success: false, error: '缺少 ARP 条目 ID' });
+      return;
+    }
+
+    await routerosClient.remove(IP_ARP_PATH, id);
+    res.json({ success: true, message: 'ARP 条目已删除' });
+  } catch (error) {
+    logger.error('Failed to delete ARP entry:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : '删除 ARP 条目失败',
     });
   }
 }

@@ -68,6 +68,37 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Socksify' }
       },
       {
+        path: 'ip/arp',
+        name: 'IpArp',
+        component: () => import('@/views/ArpView.vue'),
+        meta: { title: 'ARP' }
+      },
+      // IP Firewall routes (new location under IP)
+      {
+        path: 'ip/firewall/filter',
+        name: 'IpFirewallFilter',
+        component: () => import('@/views/FirewallFilterView.vue'),
+        meta: { title: 'Filter 规则' }
+      },
+      {
+        path: 'ip/firewall/nat',
+        name: 'IpFirewallNat',
+        component: () => import('@/views/FirewallNatView.vue'),
+        meta: { title: 'NAT 规则' }
+      },
+      {
+        path: 'ip/firewall/mangle',
+        name: 'IpFirewallMangle',
+        component: () => import('@/views/FirewallMangleView.vue'),
+        meta: { title: 'Mangle 规则' }
+      },
+      {
+        path: 'ip/firewall/address-list',
+        name: 'IpFirewallAddressList',
+        component: () => import('@/views/FirewallAddressListView.vue'),
+        meta: { title: '地址列表' }
+      },
+      {
         path: 'system/scheduler',
         name: 'Scheduler',
         component: () => import('@/views/SchedulerView.vue'),
@@ -85,29 +116,22 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/PowerManagementView.vue'),
         meta: { title: '电源管理' }
       },
+      // Old firewall routes - redirect to new IP firewall routes
       {
         path: 'firewall/filter',
-        name: 'FirewallFilter',
-        component: () => import('@/views/FirewallFilterView.vue'),
-        meta: { title: 'Filter 规则' }
+        redirect: '/ip/firewall/filter'
       },
       {
         path: 'firewall/nat',
-        name: 'FirewallNat',
-        component: () => import('@/views/FirewallNatView.vue'),
-        meta: { title: 'NAT 规则' }
+        redirect: '/ip/firewall/nat'
       },
       {
         path: 'firewall/mangle',
-        name: 'FirewallMangle',
-        component: () => import('@/views/FirewallMangleView.vue'),
-        meta: { title: 'Mangle 规则' }
+        redirect: '/ip/firewall/mangle'
       },
       {
         path: 'firewall/address-list',
-        name: 'FirewallAddressList',
-        component: () => import('@/views/FirewallAddressListView.vue'),
-        meta: { title: '地址列表' }
+        redirect: '/ip/firewall/address-list'
       },
       {
         path: 'container',

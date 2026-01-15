@@ -686,23 +686,8 @@ export class ConfigSnapshotService implements IConfigSnapshotService {
       deletions: diff.deletions,
     };
 
-    // 记录配置变更到审计日志
-    if (diff.additions.length > 0 || diff.modifications.length > 0 || diff.deletions.length > 0) {
-      await auditLogger.log({
-        action: 'config_change',
-        actor: 'system',
-        details: {
-          trigger: 'snapshot_compare',
-          metadata: {
-            snapshotA: idA,
-            snapshotB: idB,
-            additionsCount: diff.additions.length,
-            modificationsCount: diff.modifications.length,
-            deletionsCount: diff.deletions.length,
-          },
-        },
-      });
-    }
+    // 注意：对比快照是只读操作，不记录审计日志
+    // Requirements: 7.1, 7.5 - 只读操作不产生审计记录
 
     return snapshotDiff;
   }

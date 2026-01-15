@@ -23,6 +23,8 @@ import {
   getAllDhcpLeases, addDhcpLease, updateDhcpLease, deleteDhcpLease, makeDhcpLeaseStatic,
   // Socks
   getAllSocks, addSocks, updateSocks, deleteSocks, enableSocks, disableSocks,
+  // ARP
+  getAllArp, addArp, deleteArp,
 } from '../controllers/ipController';
 
 const router = Router();
@@ -84,5 +86,10 @@ router.patch('/socks/:id', updateSocks);
 router.delete('/socks/:id', deleteSocks);
 router.post('/socks/:id/enable', enableSocks);
 router.post('/socks/:id/disable', disableSocks);
+
+// ==================== ARP 路由 ====================
+router.get('/arp', getAllArp);
+router.post('/arp', addArp);
+router.delete('/arp/:id', deleteArp);
 
 export default router;

@@ -147,7 +147,11 @@ export const ipApi = {
   updateSocks: (id: string, data: object) => api.patch(`/ip/socks/${id}`, data),
   deleteSocks: (id: string) => api.delete(`/ip/socks/${id}`),
   enableSocks: (id: string) => api.post(`/ip/socks/${id}/enable`),
-  disableSocks: (id: string) => api.post(`/ip/socks/${id}/disable`)
+  disableSocks: (id: string) => api.post(`/ip/socks/${id}/disable`),
+  // ARP
+  getArp: () => api.get('/ip/arp'),
+  addArp: (data: object) => api.post('/ip/arp', data),
+  deleteArp: (id: string) => api.delete(`/ip/arp/${id}`)
 }
 
 

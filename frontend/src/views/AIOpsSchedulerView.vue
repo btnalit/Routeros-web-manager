@@ -159,10 +159,22 @@
             {{ row.completedAt ? formatDuration(row.completedAt - row.startedAt) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="结果" min-width="200" show-overflow-tooltip>
+        <el-table-column label="结果" min-width="200">
           <template #default="{ row }">
             <span v-if="row.error" class="error-text">{{ row.error }}</span>
-            <span v-else-if="row.result">{{ formatResult(row.result) }}</span>
+            <template v-else-if="row.result">
+              <el-button
+                v-if="row.type === 'inspection' && isInspectionResult(row.result)"
+                type="primary"
+                link
+                size="small"
+                @click="showExecutionDetail(row)"
+              >
+                <el-icon><View /></el-icon>
+                查看详情
+              </el-button>
+              <span v-else class="result-text">{{ formatResult(row.result) }}</span>
+            </template>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -284,11 +296,170 @@
         <el-button type="primary" @click="editTask(selectedTask!)">编辑</el-button>
       </template>
     </el-dialog>
+
+    <!-- Execution Detail Dialog (Inspection Result) -->
+    <el-dialog
+      v-model="executionDetailVisible"
+      title="巡检报告详情"
+      width="800px"
+      destroy-on-close
+    >
+      <template v-if="selectedExecution && selectedInspectionResult">
+        <!-- Summary -->
+        <el-card shadow="never" class="inspection-summary-card">
+          <div class="inspection-summary">
+            <div class="summary-item">
+              <span class="summary-label">巡检时间</span>
+              <span class="summary-value">{{ formatTime(selectedInspectionResult.timestamp) }}</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">整体状态</span>
+              <el-tag :type="getOverallStatusType(selectedInspectionResult.summary.overallStatus)" size="large">
+                {{ getOverallStatusText(selectedInspectionResult.summary.overallStatus) }}
+              </el-tag>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">发现问题</span>
+              <span class="summary-value" :class="{ 'has-issues': selectedInspectionResult.summary.issueCount > 0 }">
+                {{ selectedInspectionResult.summary.issueCount }} 个
+              </span>
+            </div>
+          </div>
+        </el-card>
+
+        <!-- System Health -->
+        <el-card shadow="never" class="inspection-section-card">
+          <template #header>
+            <span class="section-title">系统健康状态</span>
+          </template>
+          <el-row :gutter="20">
+            <el-col :span="6">
+              <div class="metric-item">
+                <span class="metric-label">CPU</span>
+                <el-progress
+                  type="dashboard"
+                  :percentage="selectedInspectionResult.systemHealth.cpu"
+                  :color="getProgressColor(selectedInspectionResult.systemHealth.cpu)"
+                  :width="80"
+                />
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="metric-item">
+                <span class="metric-label">内存</span>
+                <el-progress
+                  type="dashboard"
+                  :percentage="selectedInspectionResult.systemHealth.memory"
+                  :color="getProgressColor(selectedInspectionResult.systemHealth.memory)"
+                  :width="80"
+                />
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="metric-item">
+                <span class="metric-label">磁盘</span>
+                <el-progress
+                  type="dashboard"
+                  :percentage="selectedInspectionResult.systemHealth.disk"
+                  :color="getProgressColor(selectedInspectionResult.systemHealth.disk)"
+                  :width="80"
+                />
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="metric-item">
+                <span class="metric-label">运行时间</span>
+                <span class="uptime-value">{{ formatUptime(selectedInspectionResult.systemHealth.uptime) }}</span>
+              </div>
+            </el-col>
+          </el-row>
+        </el-card>
+
+        <!-- Interfaces -->
+        <el-card shadow="never" class="inspection-section-card">
+          <template #header>
+            <span class="section-title">
+              接口状态
+              <el-tag type="success" size="small" style="margin-left: 8px;">
+                {{ selectedInspectionResult.summary.upInterfaces }} 在线
+              </el-tag>
+              <el-tag v-if="selectedInspectionResult.summary.downInterfaces > 0" type="danger" size="small" style="margin-left: 4px;">
+                {{ selectedInspectionResult.summary.downInterfaces }} 离线
+              </el-tag>
+            </span>
+          </template>
+          <el-table :data="selectedInspectionResult.interfaces" stripe max-height="200">
+            <el-table-column prop="name" label="接口名称" min-width="120" />
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'up' ? 'success' : 'danger'" size="small">
+                  {{ row.status === 'up' ? '在线' : '离线' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="接收流量" width="120">
+              <template #default="{ row }">
+                {{ formatBytes(row.rxBytes) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="发送流量" width="120">
+              <template #default="{ row }">
+                {{ formatBytes(row.txBytes) }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+
+        <!-- Issues -->
+        <el-card v-if="selectedInspectionResult.issues.length > 0" shadow="never" class="inspection-section-card">
+          <template #header>
+            <span class="section-title">发现的问题</span>
+          </template>
+          <el-table :data="selectedInspectionResult.issues" stripe>
+            <el-table-column label="严重级别" width="100">
+              <template #default="{ row }">
+                <el-tag :type="getSeverityTagType(row.severity)" size="small">
+                  {{ getSeverityText(row.severity) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="message" label="问题描述" min-width="200" show-overflow-tooltip />
+            <el-table-column label="指标" width="120">
+              <template #default="{ row }">
+                {{ row.metric || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="当前值" width="100">
+              <template #default="{ row }">
+                {{ row.value !== undefined ? row.value : '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="阈值" width="100">
+              <template #default="{ row }">
+                {{ row.threshold !== undefined ? row.threshold : '-' }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+
+        <!-- Report Link -->
+        <div v-if="selectedInspectionResult.reportId" class="report-link">
+          <el-button type="primary" link @click="goToReport(selectedInspectionResult.reportId)">
+            <el-icon><Document /></el-icon>
+            查看完整健康报告
+          </el-button>
+        </div>
+      </template>
+      <template #footer>
+        <el-button @click="executionDetailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Refresh,
@@ -296,7 +467,9 @@ import {
   Clock,
   List,
   VideoPlay,
-  ArrowDown
+  ArrowDown,
+  View,
+  Document
 } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import {
@@ -305,8 +478,44 @@ import {
   type TaskExecution,
   type CreateScheduledTaskInput,
   type ScheduledTaskType,
-  type TaskExecutionStatus
+  type TaskExecutionStatus,
+  type AlertSeverity
 } from '@/api/ai-ops'
+
+// Router
+const router = useRouter()
+
+// Inspection Result Type
+interface InspectionResult {
+  timestamp: number
+  systemHealth: {
+    cpu: number
+    memory: number
+    disk: number
+    uptime: number
+  }
+  interfaces: Array<{
+    name: string
+    status: 'up' | 'down'
+    rxBytes: number
+    txBytes: number
+  }>
+  issues: Array<{
+    severity: AlertSeverity
+    message: string
+    metric?: string
+    value?: number
+    threshold?: number
+  }>
+  summary: {
+    totalInterfaces: number
+    upInterfaces: number
+    downInterfaces: number
+    issueCount: number
+    overallStatus: 'healthy' | 'warning' | 'critical'
+  }
+  reportId?: string
+}
 
 // State
 const loading = ref(false)
@@ -316,9 +525,12 @@ const tasks = ref<ScheduledTask[]>([])
 const executions = ref<TaskExecution[]>([])
 const dialogVisible = ref(false)
 const detailVisible = ref(false)
+const executionDetailVisible = ref(false)
 const isEditing = ref(false)
 const submitting = ref(false)
 const selectedTask = ref<ScheduledTask | null>(null)
+const selectedExecution = ref<TaskExecution | null>(null)
+const selectedInspectionResult = ref<InspectionResult | null>(null)
 const editingTaskId = ref<string | null>(null)
 const formRef = ref<FormInstance>()
 
@@ -636,9 +848,110 @@ const formatResult = (result: unknown): string => {
   if (typeof result === 'object' && result !== null) {
     const obj = result as Record<string, unknown>
     if ('message' in obj) return String(obj.message)
+    // For inspection results, show summary
+    if ('summary' in obj && typeof obj.summary === 'object' && obj.summary !== null) {
+      const summary = obj.summary as Record<string, unknown>
+      if ('overallStatus' in summary) {
+        const statusText: Record<string, string> = {
+          healthy: '健康',
+          warning: '警告',
+          critical: '严重'
+        }
+        return `状态: ${statusText[String(summary.overallStatus)] || summary.overallStatus}, 问题: ${summary.issueCount || 0} 个`
+      }
+    }
     return JSON.stringify(result)
   }
   return String(result)
+}
+
+// Check if result is an inspection result
+const isInspectionResult = (result: unknown): result is InspectionResult => {
+  if (typeof result !== 'object' || result === null) return false
+  const obj = result as Record<string, unknown>
+  return 'timestamp' in obj && 'systemHealth' in obj && 'interfaces' in obj && 'issues' in obj && 'summary' in obj
+}
+
+// Show execution detail dialog
+const showExecutionDetail = (execution: TaskExecution) => {
+  selectedExecution.value = execution
+  if (execution.result && isInspectionResult(execution.result)) {
+    selectedInspectionResult.value = execution.result
+    executionDetailVisible.value = true
+  }
+}
+
+// Get overall status tag type
+const getOverallStatusType = (status: string): 'success' | 'warning' | 'danger' => {
+  const types: Record<string, 'success' | 'warning' | 'danger'> = {
+    healthy: 'success',
+    warning: 'warning',
+    critical: 'danger'
+  }
+  return types[status] || 'info'
+}
+
+// Get overall status text
+const getOverallStatusText = (status: string): string => {
+  const texts: Record<string, string> = {
+    healthy: '健康',
+    warning: '警告',
+    critical: '严重'
+  }
+  return texts[status] || status
+}
+
+// Get progress color based on percentage
+const getProgressColor = (percentage: number): string => {
+  if (percentage >= 90) return '#f56c6c'
+  if (percentage >= 80) return '#e6a23c'
+  return '#67c23a'
+}
+
+// Format uptime
+const formatUptime = (seconds: number): string => {
+  if (seconds < 60) return `${seconds} 秒`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} 小时 ${Math.floor((seconds % 3600) / 60)} 分钟`
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  return `${days} 天 ${hours} 小时`
+}
+
+// Format bytes
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
+// Get severity tag type
+const getSeverityTagType = (severity: AlertSeverity): 'info' | 'warning' | 'danger' => {
+  const types: Record<AlertSeverity, 'info' | 'warning' | 'danger'> = {
+    info: 'info',
+    warning: 'warning',
+    critical: 'danger',
+    emergency: 'danger'
+  }
+  return types[severity] || 'info'
+}
+
+// Get severity text
+const getSeverityText = (severity: AlertSeverity): string => {
+  const texts: Record<AlertSeverity, string> = {
+    info: '信息',
+    warning: '警告',
+    critical: '严重',
+    emergency: '紧急'
+  }
+  return texts[severity] || severity
+}
+
+// Go to health report
+const goToReport = (reportId: string) => {
+  executionDetailVisible.value = false
+  router.push(`/ai-ops/reports?id=${reportId}`)
 }
 </script>
 
@@ -746,6 +1059,77 @@ const formatResult = (result: unknown): string => {
   margin-left: 12px;
   font-size: 12px;
   color: #909399;
+}
+
+/* Inspection Detail Dialog */
+.inspection-summary-card {
+  margin-bottom: 16px;
+}
+
+.inspection-summary {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-label {
+  font-size: 14px;
+  color: #909399;
+}
+
+.summary-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.summary-value.has-issues {
+  color: #f56c6c;
+}
+
+.inspection-section-card {
+  margin-bottom: 16px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.metric-label {
+  font-size: 14px;
+  color: #606266;
+}
+
+.uptime-value {
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+  margin-top: 20px;
+}
+
+.report-link {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.result-text {
+  color: #606266;
 }
 
 /* Responsive */

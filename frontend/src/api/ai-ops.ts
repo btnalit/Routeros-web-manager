@@ -104,6 +104,11 @@ export interface MetricsCollectorConfig {
 }
 
 /**
+ * 接口状态目标值
+ */
+export type InterfaceStatusTarget = 'up' | 'down';
+
+/**
  * 告警规则
  */
 export interface AlertRule {
@@ -114,6 +119,7 @@ export interface AlertRule {
   metricLabel?: string
   operator: AlertOperator
   threshold: number
+  targetStatus?: InterfaceStatusTarget  // 接口状态目标值（仅用于 interface_status 类型）
   duration: number
   cooldownMs: number
   severity: AlertSeverity

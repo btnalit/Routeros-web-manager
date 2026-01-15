@@ -2,12 +2,15 @@
  * AuditLogger 审计日志服务
  * 负责记录所有自动化操作的审计日志
  *
- * Requirements: 10.1, 10.2, 10.3, 10.4, 10.5
+ * Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 7.1, 7.3, 7.4
  * - 10.1: 记录脚本执行时间、触发原因、脚本内容和执行结果
  * - 10.2: 记录配置变更时间和变更内容摘要
  * - 10.3: 记录告警触发/恢复详情和处理状态
  * - 10.4: 支持按时间范围、操作类型筛选审计记录
  * - 10.5: 保留最近 180 天的审计记录，自动清理过期数据
+ * - 7.1: 仅查看配置快照页面时不产生审计记录
+ * - 7.3: 区分只读操作和写入操作
+ * - 7.4: 仅在写入操作时记录审计日志
  */
 
 import fs from 'fs/promises';
@@ -19,6 +22,31 @@ import { logger } from '../../utils/logger';
 const AUDIT_DIR = path.join(process.cwd(), 'data', 'ai-ops', 'audit');
 const DEFAULT_RETENTION_DAYS = 180; // 保留 180 天
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 每 24 小时清理一次
+
+/**
+ * 只读操作类型列表
+ * 这些操作不会产生审计日志记录
+ * Requirements: 7.1, 7.3, 7.4
+ */
+export const READ_ONLY_ACTIONS = [
+  'snapshot_view',
+  'config_view',
+  'report_view',
+] as const;
+
+/**
+ * 只读操作类型
+ */
+export type ReadOnlyAction = typeof READ_ONLY_ACTIONS[number];
+
+/**
+ * 检查操作是否为只读操作
+ * @param action 操作类型
+ * @returns 是否为只读操作
+ */
+export function isReadOnlyAction(action: string): boolean {
+  return READ_ONLY_ACTIONS.includes(action as ReadOnlyAction);
+}
 
 /**
  * 获取日期字符串 (YYYY-MM-DD) - 使用 UTC 时间
@@ -182,10 +210,18 @@ export class AuditLogger implements IAuditLogger {
 
   /**
    * 记录审计日志
+   * 只读操作（如查看快照、查看配置）不会被记录
    * @param entry 日志条目（不含 id 和 timestamp）
-   * @returns 完整的审计日志条目
+   * @returns 完整的审计日志条目，如果是只读操作则返回 null
+   * Requirements: 7.1, 7.3, 7.4
    */
-  async log(entry: Omit<AuditLog, 'id' | 'timestamp'>): Promise<AuditLog> {
+  async log(entry: Omit<AuditLog, 'id' | 'timestamp'>): Promise<AuditLog | null> {
+    // 过滤只读操作，不记录审计日志
+    if (isReadOnlyAction(entry.action)) {
+      logger.debug(`Skipping audit log for read-only action: ${entry.action}`);
+      return null;
+    }
+
     await this.ensureAuditDir();
 
     const timestamp = Date.now();

@@ -45,6 +45,14 @@
       <el-menu-item index="/ip/dhcp-client">DHCP Client</el-menu-item>
       <el-menu-item index="/ip/dhcp-server">DHCP Server</el-menu-item>
       <el-menu-item index="/ip/socks">Socksify</el-menu-item>
+      <el-menu-item index="/ip/arp">ARP</el-menu-item>
+      <el-sub-menu index="ip-firewall">
+        <template #title>Firewall</template>
+        <el-menu-item index="/ip/firewall/filter">Filter 规则</el-menu-item>
+        <el-menu-item index="/ip/firewall/nat">NAT 规则</el-menu-item>
+        <el-menu-item index="/ip/firewall/mangle">Mangle 规则</el-menu-item>
+        <el-menu-item index="/ip/firewall/address-list">地址列表</el-menu-item>
+      </el-sub-menu>
     </el-sub-menu>
 
     <el-sub-menu index="ipv6">
@@ -68,17 +76,6 @@
       <el-menu-item index="/system/scheduler">计划任务</el-menu-item>
       <el-menu-item index="/system/scripts">脚本管理</el-menu-item>
       <el-menu-item index="/system/power">电源管理</el-menu-item>
-    </el-sub-menu>
-
-    <el-sub-menu index="firewall">
-      <template #title>
-        <el-icon><Lock /></el-icon>
-        <span>Firewall</span>
-      </template>
-      <el-menu-item index="/firewall/filter">Filter 规则</el-menu-item>
-      <el-menu-item index="/firewall/nat">NAT 规则</el-menu-item>
-      <el-menu-item index="/firewall/mangle">Mangle 规则</el-menu-item>
-      <el-menu-item index="/firewall/address-list">地址列表</el-menu-item>
     </el-sub-menu>
 
     <el-sub-menu index="container">
@@ -137,7 +134,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Setting, Connection, Monitor, Position, Tools, Odometer, Lock, Box, Share, ChatDotRound, DataAnalysis } from '@element-plus/icons-vue'
+import { Setting, Connection, Monitor, Position, Tools, Odometer, Box, Share, ChatDotRound, DataAnalysis } from '@element-plus/icons-vue'
 
 defineProps<{
   collapsed?: boolean

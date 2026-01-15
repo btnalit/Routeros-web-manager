@@ -27,6 +27,9 @@ import {
 import { routerosClient } from '../routerosClient';
 import { logger } from '../../utils/logger';
 
+// 告警评估回调类型
+type AlertEvaluationCallback = (metrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] }) => Promise<void>;
+
 const METRICS_DIR = path.join(process.cwd(), 'data', 'ai-ops', 'metrics');
 const SYSTEM_METRICS_DIR = path.join(METRICS_DIR, 'system');
 const INTERFACE_METRICS_DIR = path.join(METRICS_DIR, 'interfaces');
@@ -115,6 +118,9 @@ export class MetricsCollector implements IMetricsCollector {
   
   // Traffic rate tracking (in-memory for fast access)
   private trafficHistory: Map<string, InterfaceTrafficHistory> = new Map();
+  
+  // 告警评估回调
+  private alertEvaluationCallback: AlertEvaluationCallback | null = null;
 
   /**
    * 确保目录存在
@@ -384,6 +390,15 @@ export class MetricsCollector implements IMetricsCollector {
 
       // 重置错误计数
       this.consecutiveErrors = 0;
+
+      // 触发告警评估（如果已注册回调）
+      if (this.alertEvaluationCallback) {
+        try {
+          await this.alertEvaluationCallback({ system, interfaces });
+        } catch (error) {
+          logger.error('Alert evaluation failed:', error);
+        }
+      }
 
       logger.debug('Metrics collection completed successfully');
     } catch (error) {
@@ -1084,6 +1099,24 @@ export class MetricsCollector implements IMetricsCollector {
     }
 
     return deletedCount;
+  }
+
+  /**
+   * 注册告警评估回调
+   * 每次采集完指标后会调用此回调进行告警评估
+   * @param callback 告警评估回调函数
+   */
+  registerAlertEvaluationCallback(callback: AlertEvaluationCallback): void {
+    this.alertEvaluationCallback = callback;
+    logger.info('Alert evaluation callback registered');
+  }
+
+  /**
+   * 取消注册告警评估回调
+   */
+  unregisterAlertEvaluationCallback(): void {
+    this.alertEvaluationCallback = null;
+    logger.info('Alert evaluation callback unregistered');
   }
 }
 
