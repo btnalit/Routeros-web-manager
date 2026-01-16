@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useConnectionStore } from '@/stores/connection'
+import { useDeviceStore } from '@/stores/device'
 
 const api = axios.create({
   baseURL: '/api',
@@ -7,7 +8,18 @@ const api = axios.create({
 
 // Request interceptor
 api.interceptors.request.use(
-  (config) => config,
+  (config) => {
+    // Inject deviceId if selected
+    try {
+      const deviceStore = useDeviceStore()
+      if (deviceStore.selectedDeviceId) {
+        config.params = { ...config.params, deviceId: deviceStore.selectedDeviceId }
+      }
+    } catch {
+      // Store might not be ready
+    }
+    return config
+  },
   (error) => Promise.reject(error)
 )
 
@@ -17,7 +29,7 @@ api.interceptors.response.use(
     // If API call succeeds and returns data, connection is working
     // Only update for non-connection endpoints to avoid circular updates
     const url = response.config.url || ''
-    if (!url.includes('/connection/')) {
+    if (!url.includes('/connection/') && !url.includes('/devices')) {
       try {
         const connectionStore = useConnectionStore()
         // If we get a successful response from RouterOS-related endpoints, we're connected
@@ -38,7 +50,7 @@ api.interceptors.response.use(
     // If error indicates connection is lost, update store
     if (lowerMessage.includes('not connected') || 
         lowerMessage.includes('连接已断开') ||
-        lowerMessage.includes('connection') && lowerMessage.includes('closed')) {
+        (lowerMessage.includes('connection') && lowerMessage.includes('closed'))) {
       try {
         const connectionStore = useConnectionStore()
         connectionStore.setConnected(false)
@@ -60,6 +72,13 @@ export interface RouterOSConfig {
   username: string
   password: string
   useTLS: boolean
+}
+
+// Device API
+export const deviceApi = {
+  getAll: () => api.get('/devices'),
+  create: (data: any) => api.post('/devices', data),
+  delete: (id: string) => api.delete(`/devices/${id}`)
 }
 
 // Connection API

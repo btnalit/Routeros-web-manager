@@ -20,6 +20,34 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
+          <!-- Device Switcher -->
+          <el-dropdown
+            v-if="deviceStore.devices.length > 0"
+            trigger="click"
+            @command="handleDeviceCommand"
+            class="device-switcher"
+          >
+            <span class="el-dropdown-link">
+              {{ currentDeviceName }}
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="device in deviceStore.devices"
+                  :key="device.id"
+                  :command="device.id"
+                  :class="{ 'active-device': device.id === deviceStore.selectedDeviceId }"
+                >
+                  {{ device.name }}
+                </el-dropdown-item>
+                <el-dropdown-item divided command="manage">
+                  <el-icon><Setting /></el-icon>管理设备
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+
           <ConnectionStatus />
         </div>
       </el-header>
@@ -37,16 +65,20 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
-import { Fold, Expand } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Fold, Expand, ArrowDown, Setting } from '@element-plus/icons-vue'
 import SideMenu from './SideMenu.vue'
 import ConnectionStatus from './ConnectionStatus.vue'
-import { connectionApi } from '@/api'
+import { connectionApi, deviceApi } from '@/api'
 import { useConnectionStore } from '@/stores/connection'
+import { useDeviceStore } from '@/stores/device'
+import { ElMessage } from 'element-plus'
 
 const menuCollapsed = ref(false)
 const route = useRoute()
+const router = useRouter()
 const connectionStore = useConnectionStore()
+const deviceStore = useDeviceStore()
 
 let statusCheckInterval: ReturnType<typeof setInterval> | null = null
 
@@ -72,7 +104,41 @@ const checkConnectionStatus = async () => {
   }
 }
 
-onMounted(() => {
+// Load devices on startup
+const loadDevices = async () => {
+  try {
+    const res = await deviceApi.getAll()
+    deviceStore.setDevices(res.data)
+  } catch (error) {
+    console.error('Failed to load devices:', error)
+  }
+}
+
+const currentDeviceName = computed(() => {
+  return deviceStore.selectedDevice?.name || '选择设备'
+})
+
+const handleDeviceCommand = async (command: string) => {
+  if (command === 'manage') {
+    router.push('/devices')
+    return
+  }
+
+  if (command !== deviceStore.selectedDeviceId) {
+    deviceStore.selectDevice(command)
+    ElMessage.success(`已切换到设备: ${deviceStore.selectedDevice?.name}`)
+    // Reset connection status
+    connectionStore.setConnected(false)
+    // Reload current page to refresh data for new device
+    // Or we could rely on reactivity if views are watching deviceStore.selectedDeviceId
+    // But reloading is safer to ensure all API calls re-fire
+    // Using router.go(0) or window.location.reload()
+    window.location.reload()
+  }
+}
+
+onMounted(async () => {
+  await loadDevices()
   // Initial check
   checkConnectionStatus()
   // Check every 30 seconds
@@ -92,6 +158,7 @@ interface BreadcrumbItem {
 }
 
 const routeTitles: Record<string, string> = {
+  '/devices': '设备管理',
   '/connection': '连接配置',
   '/interfaces': '接口列表',
   '/ip/addresses': 'IP 地址',
@@ -106,7 +173,7 @@ const routeTitles: Record<string, string> = {
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => {
   const path = route.path
-  const title = routeTitles[path]
+  const title = routeTitles[path] || route.meta.title as string
   if (title) {
     return [{ path, title }]
   }
@@ -170,6 +237,27 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => {
 .header-right {
   display: flex;
   align-items: center;
+  gap: 20px;
+}
+
+.device-switcher {
+  cursor: pointer;
+}
+
+.el-dropdown-link {
+  display: flex;
+  align-items: center;
+  color: #606266;
+  font-size: 14px;
+}
+
+.el-dropdown-link:hover {
+  color: #409eff;
+}
+
+.active-device {
+  color: #409eff;
+  background-color: #ecf5ff;
 }
 
 .app-main {

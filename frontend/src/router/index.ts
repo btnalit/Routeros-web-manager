@@ -14,6 +14,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '系统监控' }
       },
       {
+        path: 'devices',
+        name: 'DeviceManagement',
+        component: () => import('@/views/DeviceManagementView.vue'),
+        meta: { title: '设备管理' }
+      },
+      {
         path: 'connection',
         name: 'Connection',
         component: () => import('@/views/ConnectionView.vue'),
