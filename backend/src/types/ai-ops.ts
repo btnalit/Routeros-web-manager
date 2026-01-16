@@ -672,3 +672,745 @@ export interface IAIAnalyzer {
     alertEvent: AlertEvent
   ): Promise<{ confirmed: boolean; confidence: number; reasoning: string }>;
 }
+
+
+// ==================== AI-Ops 智能增强类型 ====================
+// Phase 1 & Phase 2 Enhancement Types
+
+// ==================== Syslog 接收类型 ====================
+
+/**
+ * Syslog 消息
+ */
+export interface SyslogMessage {
+  facility: number;           // Syslog facility (0-23)
+  severity: number;           // Syslog severity (0-7)
+  timestamp: Date;
+  hostname: string;
+  topic: string;              // RouterOS topic (e.g., 'system', 'firewall')
+  message: string;
+  raw: string;
+}
+
+/**
+ * Syslog 接收配置
+ */
+export interface SyslogReceiverConfig {
+  port: number;               // 默认 514
+  enabled: boolean;
+}
+
+/**
+ * 事件来源类型
+ */
+export type EventSource = 'syslog' | 'metrics' | 'manual' | 'api';
+
+/**
+ * Syslog 事件
+ */
+export interface SyslogEvent {
+  id: string;
+  source: 'syslog';
+  timestamp: number;
+  severity: AlertSeverity;
+  category: string;           // 映射自 RouterOS topic
+  message: string;
+  rawData: SyslogMessage;
+  metadata: {
+    hostname: string;
+    facility: number;
+    syslogSeverity: number;
+  };
+}
+
+// ==================== 指纹缓存类型 ====================
+
+/**
+ * 指纹条目
+ */
+export interface FingerprintEntry {
+  fingerprint: string;
+  firstSeen: number;
+  lastSeen: number;
+  count: number;              // 重复次数
+  ttl: number;                // 过期时间戳
+}
+
+/**
+ * 指纹缓存配置
+ */
+export interface FingerprintCacheConfig {
+  defaultTtlMs: number;       // 默认 TTL，默认 5 分钟
+  cleanupIntervalMs: number;  // 清理间隔，默认 1 分钟
+}
+
+/**
+ * 指纹缓存统计
+ */
+export interface FingerprintCacheStats {
+  size: number;
+  suppressedCount: number;
+}
+
+// ==================== 批处理类型 ====================
+
+/**
+ * 批处理配置
+ */
+export interface BatchConfig {
+  windowMs: number;           // 批处理窗口，默认 5000ms
+  maxBatchSize: number;       // 最大批次大小，默认 20
+}
+
+/**
+ * 批处理项
+ */
+export interface BatchItem {
+  alert: AlertEvent;
+  resolve: (analysis: string) => void;
+  reject: (error: Error) => void;
+}
+
+// ==================== 分析缓存类型 ====================
+
+/**
+ * 缓存的分析结果
+ */
+export interface CachedAnalysis {
+  fingerprint: string;
+  analysis: string;
+  createdAt: number;
+  ttl: number;
+  hitCount: number;
+}
+
+/**
+ * 分析缓存配置
+ */
+export interface AnalysisCacheConfig {
+  defaultTtlMs: number;       // 默认 30 分钟
+  maxSize: number;            // 最大缓存条目数，默认 1000
+}
+
+/**
+ * 分析缓存统计
+ */
+export interface AnalysisCacheStats {
+  size: number;
+  hitCount: number;
+  missCount: number;
+}
+
+// ==================== 事件预处理类型 ====================
+
+/**
+ * 设备信息
+ */
+export interface DeviceInfo {
+  hostname: string;
+  model: string;
+  version: string;
+  ip: string;
+}
+
+/**
+ * 告警规则信息（用于 metrics 来源的事件）
+ */
+export interface AlertRuleInfo {
+  ruleId: string;
+  ruleName: string;
+  metric: string;
+  threshold: number;
+  currentValue: number;
+}
+
+/**
+ * 统一事件格式
+ */
+export interface UnifiedEvent {
+  id: string;
+  source: EventSource;
+  timestamp: number;
+  severity: AlertSeverity;
+  category: string;
+  message: string;
+  rawData: unknown;
+  metadata: Record<string, unknown>;
+  deviceInfo?: DeviceInfo;
+  alertRuleInfo?: AlertRuleInfo;
+}
+
+/**
+ * 聚合信息
+ */
+export interface AggregationInfo {
+  count: number;
+  firstSeen: number;
+  lastSeen: number;
+  pattern: string;            // 聚合模式描述
+}
+
+/**
+ * 复合事件（聚合后的事件）
+ */
+export interface CompositeEvent extends UnifiedEvent {
+  isComposite: true;
+  childEvents: string[];      // 子事件 ID 列表
+  aggregation: AggregationInfo;
+}
+
+/**
+ * 聚合规则
+ */
+export interface AggregationRule {
+  id: string;
+  name: string;
+  pattern: string;            // 匹配模式（字符串形式的正则）
+  windowMs: number;           // 聚合时间窗口
+  minCount: number;           // 最小聚合数量
+  category: string;           // 事件类别
+}
+
+// ==================== 垃圾告警过滤类型 ====================
+
+/**
+ * 周期性维护窗口配置
+ */
+export interface RecurringSchedule {
+  type: 'daily' | 'weekly' | 'monthly';
+  dayOfWeek?: number[];       // 0-6, 周日-周六
+  dayOfMonth?: number[];
+}
+
+/**
+ * 维护窗口
+ */
+export interface MaintenanceWindow {
+  id: string;
+  name: string;
+  startTime: number;
+  endTime: number;
+  resources: string[];        // 受影响的资源（接口名、IP 等）
+  recurring?: RecurringSchedule;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * 创建维护窗口输入
+ */
+export type CreateMaintenanceWindowInput = Omit<MaintenanceWindow, 'id' | 'createdAt' | 'updatedAt'>;
+
+/**
+ * 更新维护窗口输入
+ */
+export type UpdateMaintenanceWindowInput = Partial<Omit<MaintenanceWindow, 'id' | 'createdAt' | 'updatedAt'>>;
+
+/**
+ * 已知问题
+ */
+export interface KnownIssue {
+  id: string;
+  pattern: string;            // 匹配模式（字符串形式的正则）
+  description: string;
+  expiresAt?: number;
+  autoResolve: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * 创建已知问题输入
+ */
+export type CreateKnownIssueInput = Omit<KnownIssue, 'id' | 'createdAt' | 'updatedAt'>;
+
+/**
+ * 更新已知问题输入
+ */
+export type UpdateKnownIssueInput = Partial<Omit<KnownIssue, 'id' | 'createdAt' | 'updatedAt'>>;
+
+/**
+ * 过滤原因
+ */
+export type FilterReason = 'maintenance' | 'known_issue' | 'transient' | 'ai_filtered';
+
+/**
+ * 过滤结果
+ */
+export interface FilterResult {
+  filtered: boolean;
+  reason?: FilterReason;
+  details?: string;
+  confidence?: number;        // AI 过滤时的置信度
+}
+
+/**
+ * 过滤反馈类型
+ */
+export type FilterFeedbackType = 'correct' | 'false_positive' | 'false_negative';
+
+/**
+ * 过滤反馈
+ */
+export interface FilterFeedback {
+  id: string;
+  alertId: string;
+  filterResult: FilterResult;
+  userFeedback: FilterFeedbackType;
+  timestamp: number;
+  userId?: string;
+}
+
+/**
+ * 过滤反馈统计
+ */
+export interface FilterFeedbackStats {
+  total: number;
+  falsePositives: number;
+  falseNegatives: number;
+}
+
+// ==================== 根因分析类型 ====================
+
+/**
+ * 根因
+ */
+export interface RootCause {
+  id: string;
+  description: string;
+  confidence: number;         // 0-100
+  evidence: string[];         // 支持证据
+  relatedAlerts: string[];    // 相关告警 ID
+}
+
+/**
+ * 时间线事件类型
+ */
+export type TimelineEventType = 'trigger' | 'symptom' | 'cause' | 'effect';
+
+/**
+ * 时间线事件
+ */
+export interface TimelineEvent {
+  timestamp: number;
+  eventId: string;
+  description: string;
+  type: TimelineEventType;
+}
+
+/**
+ * 事件时间线
+ */
+export interface EventTimeline {
+  events: TimelineEvent[];
+  startTime: number;
+  endTime: number;
+}
+
+/**
+ * 影响范围
+ */
+export type ImpactScope = 'local' | 'partial' | 'widespread';
+
+/**
+ * 影响评估
+ */
+export interface ImpactAssessment {
+  scope: ImpactScope;
+  affectedResources: string[];
+  estimatedUsers: number;
+  services: string[];
+  networkSegments: string[];
+}
+
+/**
+ * 相似历史事件
+ */
+export interface SimilarIncident {
+  id: string;
+  timestamp: number;
+  similarity: number;
+  resolution?: string;
+}
+
+/**
+ * 根因分析结果
+ */
+export interface RootCauseAnalysis {
+  id: string;
+  alertId: string;
+  timestamp: number;
+  rootCauses: RootCause[];
+  timeline: EventTimeline;
+  impact: ImpactAssessment;
+  similarIncidents?: SimilarIncident[];
+}
+
+// ==================== 修复方案类型 ====================
+
+/**
+ * 修复步骤验证
+ */
+export interface StepVerification {
+  command: string;            // 验证命令
+  expectedResult: string;     // 期望结果描述
+}
+
+/**
+ * 修复步骤
+ */
+export interface RemediationStep {
+  order: number;
+  description: string;
+  command: string;            // RouterOS 命令
+  verification: StepVerification;
+  autoExecutable: boolean;    // 是否可自动执行
+  riskLevel: RiskLevel;
+  estimatedDuration: number;  // 预计耗时（秒）
+}
+
+/**
+ * 回滚步骤
+ */
+export interface RollbackStep {
+  order: number;
+  description: string;
+  command: string;
+  condition?: string;         // 执行条件
+}
+
+/**
+ * 修复方案状态
+ */
+export type RemediationPlanStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'rolled_back';
+
+/**
+ * 修复方案
+ */
+export interface RemediationPlan {
+  id: string;
+  alertId: string;
+  rootCauseId: string;
+  timestamp: number;
+  steps: RemediationStep[];
+  rollback: RollbackStep[];
+  overallRisk: RiskLevel;
+  estimatedDuration: number;  // 总预计耗时（秒）
+  requiresConfirmation: boolean;
+  status: RemediationPlanStatus;
+}
+
+/**
+ * 执行结果
+ */
+export interface ExecutionResult {
+  stepOrder: number;
+  success: boolean;
+  output?: string;
+  error?: string;
+  duration: number;
+  verificationPassed?: boolean;
+}
+
+// ==================== 智能决策类型 ====================
+
+/**
+ * 决策类型
+ */
+export type DecisionType = 'auto_execute' | 'notify_and_wait' | 'escalate' | 'silence';
+
+/**
+ * 决策因子评估函数类型
+ */
+export type DecisionFactorEvaluator = (event: UnifiedEvent, context: DecisionContext) => number;
+
+/**
+ * 决策因子
+ */
+export interface DecisionFactor {
+  name: string;
+  weight: number;             // 权重 0-1
+  evaluate: DecisionFactorEvaluator;
+}
+
+/**
+ * 决策因子（可序列化版本，不含函数）
+ */
+export interface DecisionFactorConfig {
+  name: string;
+  weight: number;
+}
+
+/**
+ * 决策上下文
+ */
+export interface DecisionContext {
+  currentTime: Date;
+  historicalSuccessRate: number;
+  affectedScope: ImpactAssessment;
+  recentDecisions: Decision[];
+  userPreferences?: Record<string, unknown>;
+}
+
+/**
+ * 决策条件运算符
+ */
+export type DecisionConditionOperator = 'gt' | 'lt' | 'eq' | 'gte' | 'lte';
+
+/**
+ * 决策条件
+ */
+export interface DecisionCondition {
+  factor: string;
+  operator: DecisionConditionOperator;
+  value: number;
+}
+
+/**
+ * 决策规则
+ */
+export interface DecisionRule {
+  id: string;
+  name: string;
+  priority: number;           // 优先级，数字越小优先级越高
+  conditions: DecisionCondition[];
+  action: DecisionType;
+  enabled: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * 创建决策规则输入
+ */
+export type CreateDecisionRuleInput = Omit<DecisionRule, 'id' | 'createdAt' | 'updatedAt'>;
+
+/**
+ * 更新决策规则输入
+ */
+export type UpdateDecisionRuleInput = Partial<Omit<DecisionRule, 'id' | 'createdAt' | 'updatedAt'>>;
+
+/**
+ * 决策因子评分
+ */
+export interface DecisionFactorScore {
+  name: string;
+  score: number;
+  weight: number;
+}
+
+/**
+ * 决策执行结果
+ */
+export interface DecisionExecutionResult {
+  success: boolean;
+  details: string;
+}
+
+/**
+ * 决策
+ */
+export interface Decision {
+  id: string;
+  alertId: string;
+  timestamp: number;
+  action: DecisionType;
+  reasoning: string;
+  factors: DecisionFactorScore[];
+  matchedRule?: string;
+  executed: boolean;
+  executionResult?: DecisionExecutionResult;
+}
+
+// ==================== 用户反馈类型 ====================
+
+/**
+ * 告警反馈
+ */
+export interface AlertFeedback {
+  id: string;
+  alertId: string;
+  timestamp: number;
+  userId?: string;
+  useful: boolean;
+  comment?: string;
+  tags?: string[];            // 如 'false_positive', 'noise', 'important'
+}
+
+/**
+ * 创建告警反馈输入
+ */
+export type CreateAlertFeedbackInput = Omit<AlertFeedback, 'id' | 'timestamp'>;
+
+/**
+ * 反馈统计
+ */
+export interface FeedbackStats {
+  ruleId: string;
+  totalAlerts: number;
+  usefulCount: number;
+  notUsefulCount: number;
+  falsePositiveRate: number;
+  lastUpdated: number;
+}
+
+// ==================== 告警处理流水线类型 ====================
+
+/**
+ * 流水线阶段
+ */
+export type PipelineStage = 'normalize' | 'deduplicate' | 'filter' | 'analyze' | 'decide';
+
+/**
+ * 流水线处理结果
+ */
+export interface PipelineResult {
+  event: UnifiedEvent | CompositeEvent;
+  stage: PipelineStage;
+  filtered: boolean;
+  filterResult?: FilterResult;
+  analysis?: RootCauseAnalysis;
+  decision?: Decision;
+  plan?: RemediationPlan;
+}
+
+// ==================== 增强服务接口 ====================
+
+/**
+ * Syslog 接收服务接口
+ */
+export interface ISyslogReceiver {
+  start(): void;
+  stop(): void;
+  isRunning(): boolean;
+  onMessage(handler: (event: SyslogEvent) => void): void;
+  getConfig(): SyslogReceiverConfig;
+  updateConfig(config: Partial<SyslogReceiverConfig>): void;
+}
+
+/**
+ * 指纹缓存服务接口
+ */
+export interface IFingerprintCache {
+  generateFingerprint(alert: AlertEvent): string;
+  exists(fingerprint: string): boolean;
+  set(fingerprint: string, ttlMs?: number): void;
+  get(fingerprint: string): FingerprintEntry | null;
+  delete(fingerprint: string): void;
+  cleanup(): number;
+  getStats(): FingerprintCacheStats;
+}
+
+/**
+ * 批处理服务接口
+ */
+export interface IBatchProcessor {
+  add(alert: AlertEvent): Promise<string>;
+  flush(): Promise<void>;
+  getPendingCount(): number;
+  start(): void;
+  stop(): void;
+}
+
+/**
+ * 分析缓存服务接口
+ */
+export interface IAnalysisCache {
+  get(fingerprint: string): string | null;
+  set(fingerprint: string, analysis: string, ttlMs?: number): void;
+  cleanup(): number;
+  getStats(): AnalysisCacheStats;
+}
+
+/**
+ * 告警预处理服务接口
+ */
+export interface IAlertPreprocessor {
+  normalize(event: SyslogEvent | AlertEvent): UnifiedEvent;
+  aggregate(event: UnifiedEvent): UnifiedEvent | CompositeEvent;
+  enrichContext(event: UnifiedEvent): Promise<UnifiedEvent>;
+  process(event: SyslogEvent | AlertEvent): Promise<UnifiedEvent | CompositeEvent>;
+  addAggregationRule(rule: AggregationRule): void;
+  removeAggregationRule(id: string): void;
+  getAggregationRules(): AggregationRule[];
+}
+
+/**
+ * 垃圾过滤服务接口
+ */
+export interface INoiseFilter {
+  filter(event: UnifiedEvent): Promise<FilterResult>;
+  addMaintenanceWindow(window: MaintenanceWindow): void;
+  removeMaintenanceWindow(id: string): void;
+  getMaintenanceWindows(): MaintenanceWindow[];
+  isInMaintenanceWindow(event: UnifiedEvent): boolean;
+  addKnownIssue(issue: KnownIssue): void;
+  removeKnownIssue(id: string): void;
+  getKnownIssues(): KnownIssue[];
+  matchesKnownIssue(event: UnifiedEvent): KnownIssue | null;
+  recordFeedback(feedback: Omit<FilterFeedback, 'id' | 'timestamp'>): void;
+  getFeedbackStats(): FilterFeedbackStats;
+}
+
+/**
+ * 根因分析服务接口
+ */
+export interface IRootCauseAnalyzer {
+  analyzeSingle(event: UnifiedEvent): Promise<RootCauseAnalysis>;
+  analyzeCorrelated(events: UnifiedEvent[], windowMs?: number): Promise<RootCauseAnalysis>;
+  generateTimeline(events: UnifiedEvent[]): EventTimeline;
+  assessImpact(event: UnifiedEvent, rootCauses: RootCause[]): Promise<ImpactAssessment>;
+  findSimilarIncidents(event: UnifiedEvent, limit?: number): Promise<SimilarIncident[]>;
+}
+
+/**
+ * 修复方案服务接口
+ */
+export interface IRemediationAdvisor {
+  generatePlan(analysis: RootCauseAnalysis): Promise<RemediationPlan>;
+  executeStep(planId: string, stepOrder: number): Promise<ExecutionResult>;
+  executeAutoSteps(planId: string): Promise<ExecutionResult[]>;
+  executeRollback(planId: string): Promise<ExecutionResult[]>;
+  getPlan(planId: string): Promise<RemediationPlan | null>;
+  getExecutionHistory(planId: string): Promise<ExecutionResult[]>;
+}
+
+/**
+ * 决策引擎服务接口
+ */
+export interface IDecisionEngine {
+  decide(event: UnifiedEvent, analysis?: RootCauseAnalysis): Promise<Decision>;
+  executeDecision(decision: Decision, plan?: RemediationPlan): Promise<void>;
+  addRule(rule: DecisionRule): void;
+  updateRule(id: string, updates: Partial<DecisionRule>): void;
+  removeRule(id: string): void;
+  getRules(): DecisionRule[];
+  registerFactor(factor: DecisionFactor): void;
+  getFactors(): DecisionFactor[];
+  getDecisionHistory(alertId?: string, limit?: number): Promise<Decision[]>;
+}
+
+/**
+ * 反馈服务接口
+ */
+export interface IFeedbackService {
+  recordFeedback(feedback: CreateAlertFeedbackInput): Promise<AlertFeedback>;
+  getFeedback(alertId: string): Promise<AlertFeedback[]>;
+  getRuleStats(ruleId: string): Promise<FeedbackStats>;
+  getAllRuleStats(): Promise<FeedbackStats[]>;
+  getRulesNeedingReview(threshold?: number): Promise<FeedbackStats[]>;
+  exportFeedback(from?: number, to?: number): Promise<AlertFeedback[]>;
+}
+
+/**
+ * 告警处理流水线服务接口
+ */
+export interface IAlertPipeline {
+  process(event: SyslogEvent | AlertEvent): Promise<PipelineResult>;
+  getStats(): {
+    processed: number;
+    filtered: number;
+    analyzed: number;
+    decided: number;
+  };
+}

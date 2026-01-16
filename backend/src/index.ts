@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { logger } from './utils/logger';
 import { connectionRoutes, interfaceRoutes, ipRoutes, ipv6Routes, systemRoutes, dashboardRoutes, firewallRoutes, containerRoutes, aiRoutes, aiOpsRoutes } from './routes';
-import { metricsCollector, scheduler, healthReportService, auditLogger, initializeInspectionHandler, alertEngine } from './services/ai-ops';
+import { metricsCollector, scheduler, healthReportService, auditLogger, initializeInspectionHandler, alertEngine, initializeAlertPipeline, syslogReceiver } from './services/ai-ops';
 
 // Load environment variables
 dotenv.config();
@@ -87,21 +87,29 @@ const server = app.listen(PORT, () => {
 /**
  * 初始化 AI-Ops 智能运维服务
  * Requirements: 1.1, 4.1, 5.1
+ * 
+ * 性能优化：使用并行初始化减少启动时间
  */
 async function initializeAiOpsServices(): Promise<void> {
+  const startTime = Date.now();
+  
   try {
     logger.info('Initializing AI-Ops services...');
     
-    // 初始化审计日志服务（包含自动清理过期日志）
-    await auditLogger.initialize();
-    logger.info('AuditLogger initialized');
+    // 阶段 1：并行初始化独立服务（无依赖关系）
+    // 这些服务可以同时初始化，显著减少启动时间
+    const phase1Start = Date.now();
+    await Promise.all([
+      auditLogger.initialize().then(() => logger.info('AuditLogger initialized')),
+      alertEngine.initialize().then(() => logger.info('AlertEngine initialized')),
+      syslogReceiver.initialize().then(() => logger.info('SyslogReceiver initialized')),
+    ]);
+    logger.info(`Phase 1 (parallel init) completed in ${Date.now() - phase1Start}ms`);
     
-    // 初始化告警引擎
-    await alertEngine.initialize();
-    logger.info('AlertEngine initialized');
+    // 阶段 2：注册回调和处理器（依赖阶段 1 完成）
+    const phase2Start = Date.now();
     
     // 注册告警评估回调到指标采集器
-    // 每次采集完指标后自动评估告警规则
     metricsCollector.registerAlertEvaluationCallback(async (metrics) => {
       try {
         const triggeredAlerts = await alertEngine.evaluate(metrics);
@@ -112,18 +120,14 @@ async function initializeAiOpsServices(): Promise<void> {
         logger.error('Periodic alert evaluation failed:', error);
       }
     });
-    logger.info('Alert evaluation callback registered to MetricsCollector');
-    
-    // 启动指标采集器
-    await metricsCollector.start();
-    logger.info('MetricsCollector started');
+    logger.info('Alert evaluation callback registered');
     
     // 注册健康报告生成任务处理器
     scheduler.registerHandler('health-report', async (task) => {
       const config = task.config || {};
       const { from, to, channelIds } = config as { from?: number; to?: number; channelIds?: string[] };
       const now = Date.now();
-      const reportFrom = from || now - 24 * 60 * 60 * 1000; // 默认过去24小时
+      const reportFrom = from || now - 24 * 60 * 60 * 1000;
       const reportTo = to || now;
       
       if (channelIds && channelIds.length > 0) {
@@ -132,17 +136,34 @@ async function initializeAiOpsServices(): Promise<void> {
         return await healthReportService.generateReport(reportFrom, reportTo);
       }
     });
-    logger.info('Health report handler registered');
     
     // 注册巡检任务处理器
     initializeInspectionHandler();
-    logger.info('Inspection handler registered');
     
-    // 启动调度器
-    await scheduler.start();
+    // 初始化告警处理流水线
+    initializeAlertPipeline();
+    logger.info(`Phase 2 (register handlers) completed in ${Date.now() - phase2Start}ms`);
+    
+    // 阶段 3：并行启动服务
+    const phase3Start = Date.now();
+    
+    // 这些 start() 方法是同步的，使用 Promise.resolve 包装以便统一处理
+    metricsCollector.start();
+    logger.info('MetricsCollector started');
+    
+    scheduler.start();
     logger.info('Scheduler started');
     
-    logger.info('AI-Ops services initialized successfully');
+    // 如果 Syslog 接收服务已启用，则启动它
+    if (syslogReceiver.getConfig().enabled) {
+      syslogReceiver.start();
+      logger.info('SyslogReceiver started');
+    }
+    
+    logger.info(`Phase 3 (start services) completed in ${Date.now() - phase3Start}ms`);
+    
+    const totalTime = Date.now() - startTime;
+    logger.info(`AI-Ops services initialized successfully in ${totalTime}ms`);
   } catch (error) {
     logger.error('Failed to initialize AI-Ops services:', error);
   }
@@ -157,6 +178,7 @@ const gracefulShutdown = async (signal: string) => {
     logger.info('Stopping AI-Ops services...');
     await scheduler.stop();
     await metricsCollector.stop();
+    syslogReceiver.stop();
     auditLogger.stop();
     logger.info('AI-Ops services stopped');
   } catch (error) {

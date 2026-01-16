@@ -66,8 +66,9 @@ RUN mkdir -p /app/backend/data
 ENV NODE_ENV=production
 ENV PORT=3099
 
-# Expose port
+# Expose ports
 EXPOSE 3099
+EXPOSE 514/udp
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

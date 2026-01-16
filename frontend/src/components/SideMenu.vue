@@ -15,15 +15,59 @@
       <span v-if="!collapsed" class="menu-title">RouterOS Manager</span>
     </div>
 
-    <el-menu-item index="/dashboard">
+    <el-menu-item index="/ai-ops">
       <el-icon><Odometer /></el-icon>
-      <template #title>系统监控</template>
+      <template #title>运维仪表盘</template>
     </el-menu-item>
 
     <el-menu-item index="/connection">
       <el-icon><Connection /></el-icon>
       <template #title>连接配置</template>
     </el-menu-item>
+
+    <el-sub-menu index="ai-ops">
+      <template #title>
+        <el-icon><DataAnalysis /></el-icon>
+        <span>智能运维</span>
+      </template>
+      <el-sub-menu index="ai-agent">
+        <template #title>AI Agent</template>
+        <el-menu-item index="/ai/chat">AI 对话</el-menu-item>
+        <el-menu-item index="/ai/config">服务配置</el-menu-item>
+      </el-sub-menu>
+      <el-sub-menu index="ai-ops-alerts">
+        <template #title>告警管理</template>
+        <el-menu-item index="/ai-ops/alerts">告警事件</el-menu-item>
+        <el-menu-item index="/ai-ops/alerts/rules">告警规则</el-menu-item>
+      </el-sub-menu>
+      <el-sub-menu index="ai-ops-filters">
+        <template #title>过滤管理</template>
+        <el-menu-item index="/ai-ops/maintenance">维护窗口</el-menu-item>
+        <el-menu-item index="/ai-ops/known-issues">已知问题</el-menu-item>
+      </el-sub-menu>
+      <el-sub-menu index="ai-ops-scheduler">
+        <template #title>定时任务</template>
+        <el-menu-item index="/ai-ops/scheduler">任务管理</el-menu-item>
+        <el-menu-item index="/ai-ops/reports">健康报告</el-menu-item>
+      </el-sub-menu>
+      <el-sub-menu index="ai-ops-config">
+        <template #title>配置管理</template>
+        <el-menu-item index="/ai-ops/snapshots">配置快照</el-menu-item>
+        <el-menu-item index="/ai-ops/changes">配置变更</el-menu-item>
+      </el-sub-menu>
+      <el-sub-menu index="ai-ops-fault">
+        <template #title>故障自愈</template>
+        <el-menu-item index="/ai-ops/patterns">故障模式</el-menu-item>
+        <el-menu-item index="/ai-ops/decisions">决策规则</el-menu-item>
+      </el-sub-menu>
+      <el-sub-menu index="ai-ops-system">
+        <template #title>系统设置</template>
+        <el-menu-item index="/ai-ops/syslog">Syslog 配置</el-menu-item>
+        <el-menu-item index="/ai-ops/channels">通知渠道</el-menu-item>
+        <el-menu-item index="/ai-ops/audit">审计日志</el-menu-item>
+        <el-menu-item index="/ai-ops/feedback">反馈统计</el-menu-item>
+      </el-sub-menu>
+    </el-sub-menu>
 
     <el-sub-menu index="interfaces">
       <template #title>
@@ -87,54 +131,13 @@
       <el-menu-item index="/container/mounts">挂载点</el-menu-item>
       <el-menu-item index="/container/envs">环境变量</el-menu-item>
     </el-sub-menu>
-
-    <el-sub-menu index="ai">
-      <template #title>
-        <el-icon><ChatDotRound /></el-icon>
-        <span>AI Agent</span>
-      </template>
-      <el-menu-item index="/ai/chat">AI 对话</el-menu-item>
-      <el-menu-item index="/ai/config">服务配置</el-menu-item>
-    </el-sub-menu>
-
-    <el-sub-menu index="ai-ops">
-      <template #title>
-        <el-icon><DataAnalysis /></el-icon>
-        <span>智能运维</span>
-      </template>
-      <el-menu-item index="/ai-ops">运维仪表盘</el-menu-item>
-      <el-sub-menu index="ai-ops-alerts">
-        <template #title>告警管理</template>
-        <el-menu-item index="/ai-ops/alerts">告警事件</el-menu-item>
-        <el-menu-item index="/ai-ops/alerts/rules">告警规则</el-menu-item>
-      </el-sub-menu>
-      <el-sub-menu index="ai-ops-scheduler">
-        <template #title>定时任务</template>
-        <el-menu-item index="/ai-ops/scheduler">任务管理</el-menu-item>
-        <el-menu-item index="/ai-ops/reports">健康报告</el-menu-item>
-      </el-sub-menu>
-      <el-sub-menu index="ai-ops-config">
-        <template #title>配置管理</template>
-        <el-menu-item index="/ai-ops/snapshots">配置快照</el-menu-item>
-        <el-menu-item index="/ai-ops/changes">配置变更</el-menu-item>
-      </el-sub-menu>
-      <el-sub-menu index="ai-ops-fault">
-        <template #title>故障自愈</template>
-        <el-menu-item index="/ai-ops/patterns">故障模式</el-menu-item>
-      </el-sub-menu>
-      <el-sub-menu index="ai-ops-system">
-        <template #title>系统设置</template>
-        <el-menu-item index="/ai-ops/channels">通知渠道</el-menu-item>
-        <el-menu-item index="/ai-ops/audit">审计日志</el-menu-item>
-      </el-sub-menu>
-    </el-sub-menu>
   </el-menu>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Setting, Connection, Monitor, Position, Tools, Odometer, Box, Share, ChatDotRound, DataAnalysis } from '@element-plus/icons-vue'
+import { Setting, Connection, Monitor, Position, Tools, Box, Share, DataAnalysis, Odometer } from '@element-plus/icons-vue'
 
 defineProps<{
   collapsed?: boolean

@@ -38,3 +38,36 @@ export {
   type InspectionResult,
   type InspectionIssue,
 } from './inspectionHandler';
+
+// Syslog 接收服务 (AI-Ops Enhancement Phase 1)
+export { SyslogReceiver, syslogReceiver } from './syslogReceiver';
+
+// 指纹缓存服务 (AI-Ops Enhancement Phase 1)
+export { FingerprintCache, fingerprintCache } from './fingerprintCache';
+
+// 批处理服务 (AI-Ops Enhancement Phase 1)
+export { BatchProcessor, batchProcessor } from './batchProcessor';
+
+// 分析缓存服务 (AI-Ops Enhancement Phase 1)
+export { AnalysisCache, analysisCache } from './analysisCache';
+
+// 告警预处理服务 (AI-Ops Enhancement Phase 2)
+export { AlertPreprocessor, alertPreprocessor } from './alertPreprocessor';
+
+// 垃圾告警过滤服务 (AI-Ops Enhancement Phase 2)
+export { NoiseFilter, noiseFilter } from './noiseFilter';
+
+// 根因分析服务 (AI-Ops Enhancement Phase 2)
+export { RootCauseAnalyzer, rootCauseAnalyzer } from './rootCauseAnalyzer';
+
+// 修复方案服务 (AI-Ops Enhancement Phase 2)
+export { RemediationAdvisor, remediationAdvisor } from './remediationAdvisor';
+
+// 智能决策引擎 (AI-Ops Enhancement Phase 2)
+export { DecisionEngine, decisionEngine } from './decisionEngine';
+
+// 用户反馈服务 (AI-Ops Enhancement Phase 2)
+export { FeedbackService, feedbackService } from './feedbackService';
+
+// 告警处理流水线 (AI-Ops Enhancement - 服务集成)
+export { AlertPipeline, alertPipeline, initializeAlertPipeline } from './alertPipeline';

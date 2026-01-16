@@ -2,8 +2,9 @@
  * AIAnalyzer AI 分析服务
  * 封装 AI 分析能力，复用现有 AI Agent 基础设施
  *
- * Requirements: 3.2, 4.6, 6.4, 7.5
+ * Requirements: 3.2, 3.4, 4.6, 6.4, 7.5
  * - 3.2: 调用 AI 服务分析异常原因
+ * - 3.4: 请求 AI 分析时强制使用结构化 JSON 输出格式
  * - 4.6: 调用 AI 服务分析数据并生成风险评估
  * - 6.4: 调用 AI 服务分析变更影响
  * - 7.5: 匹配到故障模式时调用 AI 服务确认故障诊断
@@ -26,11 +27,34 @@ import { apiConfigService, AdapterFactory, cryptoService } from '../ai';
 import { AIProvider, ChatMessage } from '../../types/ai';
 
 /**
+ * 结构化输出 JSON Schema 定义
+ * Requirement 3.4: 强制使用结构化 JSON 输出格式
+ */
+interface StructuredAlertAnalysis {
+  summary: string;
+  problemAnalysis: string;
+  impactAssessment: string;
+  recommendations: string[];
+  riskLevel: RiskLevel;
+  confidence?: number;
+}
+
+interface StructuredBatchAnalysis {
+  analyses: Array<{
+    index: number;
+    analysis: string;
+    recommendations: string[];
+    riskLevel: RiskLevel;
+  }>;
+}
+
+/**
  * 提示词模板
+ * Requirement 3.4: 强制使用结构化 JSON 输出格式
  */
 const PROMPT_TEMPLATES = {
   /**
-   * 告警分析提示词模板
+   * 告警分析提示词模板（结构化 JSON 输出）
    */
   alertAnalysis: `你是一个专业的网络运维专家，正在分析 RouterOS 设备的告警事件。
 
@@ -48,13 +72,22 @@ const PROMPT_TEMPLATES = {
 - 磁盘使用率: {{diskUsage}}%
 - 系统运行时间: {{uptime}}
 
-请分析此告警的可能原因，并提供处理建议。回复格式：
-1. 问题分析（简要说明可能的原因）
-2. 影响评估（说明此问题可能造成的影响）
-3. 处理建议（提供具体的处理步骤）`,
+请分析此告警的可能原因，并提供处理建议。
+
+**重要：请严格按照以下 JSON 格式返回分析结果，不要包含任何其他内容：**
+\`\`\`json
+{
+  "summary": "问题概述（一句话总结）",
+  "problemAnalysis": "问题分析（详细说明可能的原因）",
+  "impactAssessment": "影响评估（说明此问题可能造成的影响）",
+  "recommendations": ["建议1", "建议2", "建议3"],
+  "riskLevel": "low|medium|high",
+  "confidence": 0.85
+}
+\`\`\``,
 
   /**
-   * 健康报告分析提示词模板
+   * 健康报告分析提示词模板（结构化 JSON 输出）
    */
   healthReportAnalysis: `你是一个专业的网络运维专家，正在分析 RouterOS 设备的健康报告数据。
 
@@ -81,13 +114,22 @@ const PROMPT_TEMPLATES = {
 - 警告: {{alertsWarning}}
 - 信息: {{alertsInfo}}
 
-请基于以上数据进行分析，提供：
-1. 风险评估（识别潜在的风险点）
-2. 趋势分析（分析资源使用趋势）
-3. 优化建议（提供具体的优化措施）`,
+请基于以上数据进行分析。
+
+**重要：请严格按照以下 JSON 格式返回分析结果，不要包含任何其他内容：**
+\`\`\`json
+{
+  "summary": "健康状况概述（一句话总结）",
+  "riskAssessment": "风险评估（识别潜在的风险点）",
+  "trendAnalysis": "趋势分析（分析资源使用趋势）",
+  "recommendations": ["优化建议1", "优化建议2", "优化建议3"],
+  "riskLevel": "low|medium|high",
+  "confidence": 0.85
+}
+\`\`\``,
 
   /**
-   * 配置变更分析提示词模板
+   * 配置变更分析提示词模板（结构化 JSON 输出）
    */
   configDiffAnalysis: `你是一个专业的网络运维专家，正在分析 RouterOS 设备的配置变更。
 
@@ -105,13 +147,22 @@ const PROMPT_TEMPLATES = {
 ## 删除的配置
 {{deletions}}
 
-请分析这些配置变更：
-1. 变更影响评估（说明这些变更可能造成的影响）
-2. 风险级别（低/中/高）
-3. 安全建议（如果存在安全风险，提供建议）`,
+请分析这些配置变更。
+
+**重要：请严格按照以下 JSON 格式返回分析结果，不要包含任何其他内容：**
+\`\`\`json
+{
+  "summary": "变更概述（一句话总结）",
+  "impactAssessment": "变更影响评估（说明这些变更可能造成的影响）",
+  "securityAnalysis": "安全分析（如果存在安全风险，说明风险点）",
+  "recommendations": ["建议1", "建议2", "建议3"],
+  "riskLevel": "low|medium|high",
+  "confidence": 0.85
+}
+\`\`\``,
 
   /**
-   * 故障诊断确认提示词模板
+   * 故障诊断确认提示词模板（结构化 JSON 输出）
    */
   faultDiagnosis: `你是一个专业的网络运维专家，正在确认故障诊断。
 
@@ -130,11 +181,48 @@ const PROMPT_TEMPLATES = {
 - 阈值: {{threshold}}
 - 严重级别: {{severity}}
 
-请确认：
-1. 此告警是否与故障模式匹配（是/否）
-2. 置信度（0-100%）
-3. 分析理由（简要说明判断依据）
-4. 是否建议执行修复脚本（是/否）`,
+请确认此告警是否与故障模式匹配。
+
+**重要：请严格按照以下 JSON 格式返回分析结果，不要包含任何其他内容：**
+\`\`\`json
+{
+  "confirmed": true,
+  "confidence": 0.85,
+  "reasoning": "分析理由（简要说明判断依据）",
+  "shouldExecuteRemediation": true
+}
+\`\`\``,
+
+  /**
+   * 批量告警分析提示词模板（结构化 JSON 输出）
+   * Requirement 3.1, 3.2, 3.3: 批量分析告警
+   */
+  batchAlertAnalysis: `你是一个专业的网络运维专家，正在批量分析 RouterOS 设备的告警事件。
+
+## 告警列表
+{{alertsList}}
+
+请为每个告警提供简要分析和建议。
+
+**重要：请严格按照以下 JSON 格式返回分析结果，不要包含任何其他内容：**
+\`\`\`json
+{
+  "analyses": [
+    {
+      "index": 0,
+      "analysis": "告警1的分析",
+      "recommendations": ["建议1", "建议2"],
+      "riskLevel": "low|medium|high"
+    },
+    {
+      "index": 1,
+      "analysis": "告警2的分析",
+      "recommendations": ["建议1", "建议2"],
+      "riskLevel": "low|medium|high"
+    }
+  ]
+}
+\`\`\``,
 };
 
 
@@ -174,18 +262,22 @@ export class AIAnalyzer implements IAIAnalyzer {
   /**
    * 获取 AI 适配器
    * 复用现有 AI Agent 的适配器工厂
+   * 每次调用都会重新读取配置，确保配置变更实时生效
    */
   private async getAdapter() {
-    // 获取默认 API 配置
+    // 获取默认 API 配置（每次都从文件读取最新配置）
     const config = await apiConfigService.getDefault();
     if (!config) {
       throw new Error('No AI provider configured. Please configure an AI provider first.');
     }
 
+    // 记录当前使用的配置
+    logger.info(`AIAnalyzer using provider: ${config.provider}, model: ${config.model}, configId: ${config.id}`);
+
     // 解密 API Key
     const apiKey = cryptoService.decrypt(config.apiKey);
 
-    // 创建适配器
+    // 创建适配器（每次都创建新实例）
     const adapter = AdapterFactory.createAdapter(config.provider, {
       apiKey,
       endpoint: config.endpoint,
@@ -342,16 +434,40 @@ export class AIAnalyzer implements IAIAnalyzer {
   }
 
   /**
-   * 解析告警分析响应
+   * 解析告警分析响应（支持结构化 JSON 输出）
+   * Requirement 3.4: 强制使用结构化 JSON 输出格式
    */
   private parseAlertAnalysisResponse(response: string, alertEvent: AlertEvent): AnalysisResult {
-    // 提取建议（简单解析）
+    try {
+      // 尝试解析 JSON 格式响应
+      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) || 
+                        response.match(/\{[\s\S]*"summary"[\s\S]*\}/);
+      
+      if (jsonMatch) {
+        const jsonStr = jsonMatch[1] || jsonMatch[0];
+        const parsed = JSON.parse(jsonStr) as StructuredAlertAnalysis;
+        
+        return {
+          summary: parsed.summary || response,
+          details: parsed.problemAnalysis ? 
+            `问题分析：${parsed.problemAnalysis}\n\n影响评估：${parsed.impactAssessment || ''}` : 
+            response,
+          recommendations: parsed.recommendations || ['建议检查相关配置和系统状态'],
+          riskLevel: this.normalizeRiskLevel(parsed.riskLevel),
+          confidence: parsed.confidence,
+        };
+      }
+    } catch (error) {
+      logger.debug('Failed to parse JSON response, falling back to text parsing:', error);
+    }
+
+    // 回退到文本解析
     const recommendations: string[] = [];
     const lines = response.split('\n');
     let inRecommendations = false;
 
     for (const line of lines) {
-      if (line.includes('处理建议') || line.includes('建议')) {
+      if (line.includes('处理建议') || line.includes('建议') || line.includes('recommendations')) {
         inRecommendations = true;
         continue;
       }
@@ -374,6 +490,17 @@ export class AIAnalyzer implements IAIAnalyzer {
       recommendations: recommendations.length > 0 ? recommendations : ['建议检查相关配置和系统状态'],
       riskLevel,
     };
+  }
+
+  /**
+   * 标准化风险级别
+   */
+  private normalizeRiskLevel(level: string | undefined): RiskLevel {
+    if (!level) return 'low';
+    const normalized = level.toLowerCase();
+    if (normalized === 'high' || normalized === '高') return 'high';
+    if (normalized === 'medium' || normalized === '中' || normalized === '中等') return 'medium';
+    return 'low';
   }
 
   /**
@@ -470,14 +597,38 @@ export class AIAnalyzer implements IAIAnalyzer {
 
 
   /**
-   * 解析健康报告分析响应
+   * 解析健康报告分析响应（支持结构化 JSON 输出）
+   * Requirement 3.4: 强制使用结构化 JSON 输出格式
    */
   private parseHealthReportResponse(
     response: string,
     metrics: HealthReport['metrics'],
     alerts: HealthReport['alerts']
   ): AnalysisResult {
-    // 提取建议
+    try {
+      // 尝试解析 JSON 格式响应
+      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) || 
+                        response.match(/\{[\s\S]*"summary"[\s\S]*\}/);
+      
+      if (jsonMatch) {
+        const jsonStr = jsonMatch[1] || jsonMatch[0];
+        const parsed = JSON.parse(jsonStr);
+        
+        return {
+          summary: parsed.summary || response,
+          details: parsed.riskAssessment ? 
+            `风险评估：${parsed.riskAssessment}\n\n趋势分析：${parsed.trendAnalysis || ''}` : 
+            response,
+          recommendations: parsed.recommendations || ['继续保持当前配置，定期检查系统状态'],
+          riskLevel: this.normalizeRiskLevel(parsed.riskLevel),
+          confidence: parsed.confidence,
+        };
+      }
+    } catch (error) {
+      logger.debug('Failed to parse JSON response, falling back to text parsing:', error);
+    }
+
+    // 回退到文本解析
     const recommendations: string[] = [];
     const lines = response.split('\n');
     let inRecommendations = false;
@@ -620,10 +771,34 @@ export class AIAnalyzer implements IAIAnalyzer {
   }
 
   /**
-   * 解析配置差异分析响应
+   * 解析配置差异分析响应（支持结构化 JSON 输出）
+   * Requirement 3.4: 强制使用结构化 JSON 输出格式
    */
   private parseConfigDiffResponse(response: string, diff: SnapshotDiff): AnalysisResult {
-    // 提取建议
+    try {
+      // 尝试解析 JSON 格式响应
+      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) || 
+                        response.match(/\{[\s\S]*"summary"[\s\S]*\}/);
+      
+      if (jsonMatch) {
+        const jsonStr = jsonMatch[1] || jsonMatch[0];
+        const parsed = JSON.parse(jsonStr);
+        
+        return {
+          summary: parsed.summary || response,
+          details: parsed.impactAssessment ? 
+            `影响评估：${parsed.impactAssessment}\n\n安全分析：${parsed.securityAnalysis || ''}` : 
+            response,
+          recommendations: parsed.recommendations || ['建议在生产环境应用前进行测试'],
+          riskLevel: this.normalizeRiskLevel(parsed.riskLevel),
+          confidence: parsed.confidence,
+        };
+      }
+    } catch (error) {
+      logger.debug('Failed to parse JSON response, falling back to text parsing:', error);
+    }
+
+    // 回退到文本解析
     const recommendations: string[] = [];
     const lines = response.split('\n');
     let inRecommendations = false;
@@ -749,9 +924,30 @@ export class AIAnalyzer implements IAIAnalyzer {
   }
 
   /**
-   * 解析故障诊断响应
+   * 解析故障诊断响应（支持结构化 JSON 输出）
+   * Requirement 3.4: 强制使用结构化 JSON 输出格式
    */
   private parseFaultDiagnosisResponse(response: string): { confirmed: boolean; confidence: number; reasoning: string } {
+    try {
+      // 尝试解析 JSON 格式响应
+      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) || 
+                        response.match(/\{[\s\S]*"confirmed"[\s\S]*\}/);
+      
+      if (jsonMatch) {
+        const jsonStr = jsonMatch[1] || jsonMatch[0];
+        const parsed = JSON.parse(jsonStr);
+        
+        return {
+          confirmed: parsed.confirmed === true,
+          confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.7,
+          reasoning: parsed.reasoning || response,
+        };
+      }
+    } catch (error) {
+      logger.debug('Failed to parse JSON response, falling back to text parsing:', error);
+    }
+
+    // 回退到文本解析
     const lowerResponse = response.toLowerCase();
     
     // 尝试提取确认状态
@@ -801,6 +997,104 @@ export class AIAnalyzer implements IAIAnalyzer {
       : `告警事件与故障模式的条件不完全匹配，建议人工确认后再执行修复。`;
 
     return { confirmed, confidence, reasoning };
+  }
+
+  /**
+   * 批量分析告警（支持结构化 JSON 输出）
+   * Requirements: 3.1, 3.2, 3.3, 3.4 - 批量分析告警并返回结构化结果
+   */
+  async analyzeBatch(alerts: Array<{
+    index: number;
+    id: string;
+    ruleName: string;
+    severity: string;
+    metric: string;
+    currentValue: number;
+    threshold: number;
+    message: string;
+  }>): Promise<StructuredBatchAnalysis> {
+    await this.initialize();
+
+    try {
+      // 构建告警列表文本
+      const alertsList = alerts.map((info, i) => 
+        `[告警 ${i + 1}] ID: ${info.id}\n  规则: ${info.ruleName}\n  严重级别: ${info.severity}\n  指标: ${info.metric}\n  当前值: ${info.currentValue}\n  阈值: ${info.threshold}\n  消息: ${info.message}`
+      ).join('\n\n');
+
+      // 构建提示词
+      const prompt = this.replaceTemplateVars(PROMPT_TEMPLATES.batchAlertAnalysis, {
+        alertsList,
+      });
+
+      // 调用 AI 分析
+      const response = await this.chat(
+        '你是一个专业的网络运维专家，擅长批量分析 RouterOS 设备的告警。请严格按照 JSON 格式返回结果。',
+        prompt
+      );
+
+      // 解析响应
+      return this.parseBatchAnalysisResponse(response, alerts.length);
+    } catch (error) {
+      logger.warn('AI batch analysis failed, using fallback:', error);
+      return this.getFallbackBatchAnalysis(alerts);
+    }
+  }
+
+  /**
+   * 解析批量分析响应
+   */
+  private parseBatchAnalysisResponse(response: string, expectedCount: number): StructuredBatchAnalysis {
+    try {
+      // 尝试解析 JSON 格式响应
+      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) || 
+                        response.match(/\{[\s\S]*"analyses"[\s\S]*\}/);
+      
+      if (jsonMatch) {
+        const jsonStr = jsonMatch[1] || jsonMatch[0];
+        const parsed = JSON.parse(jsonStr) as StructuredBatchAnalysis;
+        
+        // 确保返回正确数量的结果
+        const analyses = parsed.analyses || [];
+        while (analyses.length < expectedCount) {
+          analyses.push({
+            index: analyses.length,
+            analysis: '分析结果不可用',
+            recommendations: ['建议检查相关配置和系统状态'],
+            riskLevel: 'low',
+          });
+        }
+        
+        return { analyses };
+      }
+    } catch (error) {
+      logger.debug('Failed to parse batch JSON response:', error);
+    }
+
+    // 回退：返回默认结果
+    return this.getFallbackBatchAnalysis([]);
+  }
+
+  /**
+   * 获取批量分析的回退结果
+   */
+  private getFallbackBatchAnalysis(alerts: Array<{
+    index: number;
+    ruleName: string;
+    severity: string;
+    message: string;
+  }>): StructuredBatchAnalysis {
+    const analyses = alerts.map((alert, index) => ({
+      index,
+      analysis: `[${alert.severity}] ${alert.ruleName}: ${alert.message}`,
+      recommendations: ['建议检查相关配置和系统状态'],
+      riskLevel: (alert.severity === 'emergency' || alert.severity === 'critical' 
+        ? 'high' 
+        : alert.severity === 'warning' 
+          ? 'medium' 
+          : 'low') as RiskLevel,
+    }));
+
+    return { analyses };
   }
 
   /**

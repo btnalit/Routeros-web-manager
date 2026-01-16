@@ -37,12 +37,17 @@ import {
   MetricType,
   AlertSeverity,
   InterfaceStatusTarget,
+  UnifiedEvent,
+  CompositeEvent,
 } from '../../types/ai-ops';
 import { logger } from '../../utils/logger';
 import { auditLogger } from './auditLogger';
 import { notificationService } from './notificationService';
 import { routerosClient } from '../routerosClient';
 import { metricsCollector } from './metricsCollector';
+import { fingerprintCache } from './fingerprintCache';
+import { alertPreprocessor } from './alertPreprocessor';
+import { alertPipeline } from './alertPipeline';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'ai-ops');
 const ALERTS_DIR = path.join(DATA_DIR, 'alerts');
@@ -83,6 +88,9 @@ export class AlertEngine implements IAlertEngine {
   // 活跃告警缓存（内存中）
   private activeAlerts: Map<string, AlertEvent> = new Map();
 
+  // 预处理事件处理器（用于 AI 智能处理流程）
+  private preprocessedEventHandlers: Array<(event: UnifiedEvent | CompositeEvent) => void> = [];
+
   /**
    * 确保数据目录存在
    */
@@ -97,15 +105,22 @@ export class AlertEngine implements IAlertEngine {
 
   /**
    * 初始化服务
+   * 性能优化：并行加载规则和活跃告警
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
+    const startTime = Date.now();
     await this.ensureDataDir();
-    await this.loadRules();
-    await this.loadActiveAlerts();
+    
+    // 并行加载规则和活跃告警（两者独立，无依赖关系）
+    await Promise.all([
+      this.loadRules(),
+      this.loadActiveAlerts(),
+    ]);
+    
     this.initialized = true;
-    logger.info('AlertEngine initialized');
+    logger.info(`AlertEngine initialized in ${Date.now() - startTime}ms`);
   }
 
   /**
@@ -364,6 +379,11 @@ export class AlertEngine implements IAlertEngine {
       await this.saveEvent(event);
       this.activeAlerts.delete(event.id);
 
+      // 清除指纹缓存，允许同样的告警再次触发
+      const fingerprint = fingerprintCache.generateFingerprint(event);
+      fingerprintCache.delete(fingerprint);
+      logger.debug(`Fingerprint cleared for rule-disabled alert: ${fingerprint}`);
+
       // 记录审计日志
       await auditLogger.log({
         action: 'alert_resolve',
@@ -616,8 +636,36 @@ export class AlertEngine implements IAlertEngine {
         );
 
         if (!existingAlert) {
+          // 创建临时告警对象用于指纹检查
+          const tempAlert: AlertEvent = {
+            id: '',
+            ruleId: rule.id,
+            ruleName: rule.name,
+            severity: rule.severity,
+            metric: rule.metric,
+            currentValue,
+            threshold: rule.threshold,
+            message: this.buildAlertMessage(rule, currentValue),
+            status: 'active',
+            triggeredAt: now,
+          };
+
+          // 生成指纹并检查是否重复
+          const fingerprint = fingerprintCache.generateFingerprint(tempAlert);
+          
+          if (fingerprintCache.exists(fingerprint)) {
+            // 指纹存在且在冷却期内，抑制重复告警
+            fingerprintCache.set(fingerprint); // 更新 lastSeen 和 count
+            logger.info(`Alert suppressed by fingerprint deduplication: ${rule.name} (fingerprint: ${fingerprint})`);
+            continue;
+          }
+
           // 创建新告警
           const event = await this.createAlertEvent(rule, currentValue, metrics.system);
+          
+          // 添加指纹到缓存
+          fingerprintCache.set(fingerprint);
+          
           triggeredEvents.push(event);
 
           // 更新规则最后触发时间
@@ -697,12 +745,35 @@ export class AlertEngine implements IAlertEngine {
       },
     });
 
-    // 发送通知
-    await this.sendAlertNotification(event, rule);
-
     // 执行自动响应（如果配置）
     if (rule.autoResponse?.enabled && rule.autoResponse.script) {
       await this.executeAutoResponse(event, rule);
+    }
+
+    // 调用告警处理流水线进行完整的 AI 智能处理
+    // Requirements: 4.1, 5.1, 6.1, 8.1 - 归一化 → 去重 → 过滤 → 分析 → 决策
+    // 注意：通知由流水线中的决策引擎统一处理，避免重复通知
+    try {
+      const pipelineResult = await alertPipeline.process(event);
+      this.emitPreprocessedEvent(pipelineResult.event);
+      
+      // 记录流水线处理结果
+      if (pipelineResult.filtered) {
+        logger.info(`Alert filtered by pipeline: ${event.id}, reason: ${pipelineResult.filterResult?.reason}`);
+      } else if (pipelineResult.decision) {
+        logger.info(`Alert decision made: ${event.id}, action: ${pipelineResult.decision.action}`);
+      }
+    } catch (error) {
+      logger.warn('Failed to process alert through pipeline:', error);
+      // 降级处理：流水线失败时才发送基础通知
+      await this.sendAlertNotification(event, rule);
+      // 仅进行预处理
+      try {
+        const preprocessedEvent = await alertPreprocessor.process(event);
+        this.emitPreprocessedEvent(preprocessedEvent);
+      } catch (preprocessError) {
+        logger.warn('Failed to preprocess alert event:', preprocessError);
+      }
     }
 
     logger.info(`Alert triggered: ${rule.name} (${event.id})`);
@@ -831,6 +902,11 @@ export class AlertEngine implements IAlertEngine {
         await this.saveEvent(event);
         this.activeAlerts.delete(eventId);
 
+        // 清除指纹缓存，允许同样的告警再次触发
+        const fingerprint = fingerprintCache.generateFingerprint(event);
+        fingerprintCache.delete(fingerprint);
+        logger.debug(`Fingerprint cleared for rule-disabled alert: ${fingerprint}`);
+
         // 记录审计日志
         await auditLogger.log({
           action: 'alert_resolve',
@@ -891,6 +967,11 @@ export class AlertEngine implements IAlertEngine {
 
         await this.saveEvent(event);
         this.activeAlerts.delete(eventId);
+
+        // 清除指纹缓存，允许同样的告警再次触发
+        const fingerprint = fingerprintCache.generateFingerprint(event);
+        fingerprintCache.delete(fingerprint);
+        logger.debug(`Fingerprint cleared for recovered alert: ${fingerprint}`);
 
         // 记录审计日志
         await auditLogger.log({
@@ -1197,6 +1278,11 @@ export class AlertEngine implements IAlertEngine {
           found.resolvedAt = now;
           await this.writeEventsFile(dateStr, events);
 
+          // 清除指纹缓存，允许同样的告警再次触发
+          const fingerprint = fingerprintCache.generateFingerprint(found);
+          fingerprintCache.delete(fingerprint);
+          logger.debug(`Fingerprint cleared for manually resolved alert (from file): ${fingerprint}`);
+
           // 记录审计日志
           await auditLogger.log({
             action: 'alert_resolve',
@@ -1224,6 +1310,11 @@ export class AlertEngine implements IAlertEngine {
 
     await this.saveEvent(event);
     this.activeAlerts.delete(id);
+
+    // 清除指纹缓存，允许同样的告警再次触发
+    const fingerprint = fingerprintCache.generateFingerprint(event);
+    fingerprintCache.delete(fingerprint);
+    logger.debug(`Fingerprint cleared for manually resolved alert: ${fingerprint}`);
 
     // 记录审计日志
     await auditLogger.log({
@@ -1292,6 +1383,56 @@ export class AlertEngine implements IAlertEngine {
       active: ruleEvents.filter((e) => e.status === 'active').length,
       resolved: ruleEvents.filter((e) => e.status === 'resolved').length,
     };
+  }
+
+  // ==================== 预处理事件处理 ====================
+
+  /**
+   * 注册预处理事件处理器
+   * 用于将归一化后的事件传递给后续 AI 处理流程
+   * Requirements: 4.1
+   */
+  onPreprocessedEvent(handler: (event: UnifiedEvent | CompositeEvent) => void): void {
+    this.preprocessedEventHandlers.push(handler);
+    logger.debug(`Preprocessed event handler registered, total: ${this.preprocessedEventHandlers.length}`);
+  }
+
+  /**
+   * 移除预处理事件处理器
+   */
+  offPreprocessedEvent(handler: (event: UnifiedEvent | CompositeEvent) => void): void {
+    const index = this.preprocessedEventHandlers.indexOf(handler);
+    if (index !== -1) {
+      this.preprocessedEventHandlers.splice(index, 1);
+      logger.debug(`Preprocessed event handler removed, total: ${this.preprocessedEventHandlers.length}`);
+    }
+  }
+
+  /**
+   * 发送预处理事件给所有处理器
+   */
+  private emitPreprocessedEvent(event: UnifiedEvent | CompositeEvent): void {
+    for (const handler of this.preprocessedEventHandlers) {
+      try {
+        handler(event);
+      } catch (error) {
+        logger.error('Preprocessed event handler error:', error);
+      }
+    }
+    
+    // Log for debugging
+    const isComposite = 'isComposite' in event && event.isComposite;
+    logger.debug(
+      `Preprocessed event emitted: ${event.id}, source: ${event.source}, composite: ${isComposite}`
+    );
+  }
+
+  /**
+   * 获取预处理器实例
+   * 用于外部访问预处理器功能
+   */
+  getPreprocessor() {
+    return alertPreprocessor;
   }
 }
 

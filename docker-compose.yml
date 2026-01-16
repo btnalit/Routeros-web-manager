@@ -9,6 +9,7 @@ services:
     restart: unless-stopped
     ports:
       - "${PORT:-8080}:3099"
+      - "${SYSLOG_PORT:-514}:514/udp"
     environment:
       - NODE_ENV=production
       - PORT=3099

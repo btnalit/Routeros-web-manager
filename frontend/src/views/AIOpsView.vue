@@ -79,6 +79,46 @@
         </template>
       </el-alert>
 
+      <!-- System Info Cards -->
+      <el-row :gutter="20" class="info-row">
+        <el-col :xs="24" :sm="12" :md="8" :lg="4">
+          <div class="info-card">
+            <div class="info-label">CPU 型号</div>
+            <div class="info-value">{{ systemInfo?.cpu || '-' }}</div>
+          </div>
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="8" :lg="4">
+          <div class="info-card">
+            <div class="info-label">CPU 核心数</div>
+            <div class="info-value">{{ systemInfo?.['cpu-count'] || '-' }} 核</div>
+          </div>
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="8" :lg="4">
+          <div class="info-card">
+            <div class="info-label">CPU 频率</div>
+            <div class="info-value">{{ systemInfo?.['cpu-frequency'] || '-' }} MHz</div>
+          </div>
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="8" :lg="4">
+          <div class="info-card">
+            <div class="info-label">架构</div>
+            <div class="info-value">{{ systemInfo?.['architecture-name'] || '-' }}</div>
+          </div>
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="8" :lg="4">
+          <div class="info-card">
+            <div class="info-label">RouterOS 版本</div>
+            <div class="info-value">{{ systemInfo?.version || '-' }}</div>
+          </div>
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="8" :lg="4">
+          <div class="info-card">
+            <div class="info-label">运行时间</div>
+            <div class="info-value uptime">{{ formatUptime(systemInfo?.uptime) }}</div>
+          </div>
+        </el-col>
+      </el-row>
+
       <!-- System Resource Cards -->
       <el-row :gutter="20" class="resource-row">
         <!-- CPU Card -->
@@ -413,6 +453,17 @@ import {
   type InterfaceMetrics,
   type TrafficRatePoint
 } from '@/api/ai-ops'
+import { dashboardApi as systemDashboardApi } from '@/api'
+
+// System Resource interface
+interface SystemResource {
+  cpu: string
+  'cpu-count': string
+  'cpu-frequency': string
+  'architecture-name': string
+  version: string
+  uptime: string
+}
 
 // Register ECharts components
 use([
@@ -434,6 +485,7 @@ const autoRefresh = ref(true)
 const selectedInterface = ref('')
 const scheduledTasks = ref<ScheduledTask[]>([])
 const trafficData = ref<Record<string, TrafficRatePoint[]>>({})
+const systemInfo = ref<SystemResource | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 // Computed
@@ -570,10 +622,11 @@ const loadDashboardData = async () => {
   error.value = ''
 
   try {
-    const [dashboardResponse, tasksResponse, trafficResponse] = await Promise.all([
+    const [dashboardResponse, tasksResponse, trafficResponse, systemResponse] = await Promise.all([
       dashboardApi.getData(),
       schedulerApi.getTasks(),
-      metricsApi.getTrafficHistory() // 获取所有接口的流量历史
+      metricsApi.getTrafficHistory(), // 获取所有接口的流量历史
+      systemDashboardApi.getResource() // 获取系统信息
     ])
 
     if (dashboardResponse.data.success && dashboardResponse.data.data) {
@@ -594,6 +647,11 @@ const loadDashboardData = async () => {
     // 更新流量数据
     if (trafficResponse.data.success && trafficResponse.data.data) {
       trafficData.value = trafficResponse.data.data as Record<string, TrafficRatePoint[]>
+    }
+
+    // 更新系统信息
+    if (systemResponse.data.success && systemResponse.data.data) {
+      systemInfo.value = systemResponse.data.data
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : '获取数据失败'
@@ -646,6 +704,30 @@ const formatNextRun = (timestamp?: number): string => {
   if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟后`
   if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时后`
   return `${Math.floor(diff / 86400000)} 天后`
+}
+
+// Format uptime from RouterOS format (1w6d7h24m25s) to readable format
+const formatUptime = (uptime?: string): string => {
+  if (!uptime) return '-'
+  
+  const weeks = uptime.match(/(\d+)w/)
+  const days = uptime.match(/(\d+)d/)
+  const hours = uptime.match(/(\d+)h/)
+  const minutes = uptime.match(/(\d+)m/)
+  
+  let totalDays = 0
+  if (weeks) totalDays += parseInt(weeks[1]) * 7
+  if (days) totalDays += parseInt(days[1])
+  
+  const hoursVal = hours ? parseInt(hours[1]) : 0
+  const minutesVal = minutes ? parseInt(minutes[1]) : 0
+  
+  const parts: string[] = []
+  if (totalDays > 0) parts.push(`${totalDays}天`)
+  if (hoursVal > 0 || totalDays > 0) parts.push(`${hoursVal}时`)
+  parts.push(`${minutesVal}分`)
+  
+  return parts.join('')
 }
 
 const getProgressColor = (percentage: number): string => {
@@ -859,6 +941,66 @@ onUnmounted(() => {
 /* Resource Cards */
 .resource-row {
   margin-bottom: 20px;
+}
+
+/* System Info Cards */
+.info-row {
+  margin-bottom: 20px;
+}
+
+.info-card {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e7ed 100%);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  transition: all 0.3s ease;
+  border-left: 4px solid #409eff;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.info-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.info-label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 8px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.info-label::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  background: #409eff;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.info-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-value.uptime {
+  color: #409eff;
+  background: linear-gradient(90deg, #409eff, #67c23a);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .resource-card {

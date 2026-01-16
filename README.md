@@ -7,7 +7,7 @@
 ### 基础管理
 
 - 🔗 **连接管理** - RouterOS 设备连接配置，支持 API 和 API-SSL 连接，连接信息自动保存
-- 📊 **系统监控** - 实时显示 CPU、内存、磁盘使用率，系统启动时间和运行时长
+- 📊 **系统监控** - 实时显示 CPU、内存、磁盘使用率，系统信息（已整合至运维仪表盘）
 - 🌐 **接口管理** - 查看和配置网络接口（启用/禁用/编辑）
   - 支持 L2TP Client 接口的创建、编辑、删除
   - 支持 PPPoE Client 接口的创建、编辑、删除
@@ -55,14 +55,18 @@
   - 流式响应，实时显示 AI 回复
 
 - 🛡️ **AI-Ops 智能运维** - 全方位智能运维平台
+  - **统一运维仪表盘** - 首页集成系统信息、资源监控、流量图表、告警和任务概览
   - **实时监控仪表盘** - CPU、内存、磁盘、接口流量实时监控
+  - **接口流量历史** - 支持服务重启后自动恢复历史流量数据
   - **智能告警系统** - 自定义告警规则，支持多级别告警（信息/警告/严重/紧急）
+  - **统一告警管道** - AlertPipeline 整合告警引擎和 Syslog 接收器
   - **定时巡检任务** - Cron 表达式调度，自动执行巡检和备份
   - **配置快照管理** - 自动/手动备份配置，支持差异对比和一键恢复
   - **健康报告生成** - 自动生成系统健康报告，支持 Markdown/PDF 导出
   - **故障自愈引擎** - 内置故障模式识别，支持自动修复（PPPoE 断线重连、接口重启等）
   - **多渠道通知** - 支持 Web 推送、Webhook（企业微信/钉钉/飞书）、邮件通知
   - **审计日志** - 完整的操作审计记录
+  - **并行初始化** - 优化模块启动性能，支持并行加载
 
 ## 技术栈
 
@@ -173,6 +177,7 @@ docker run -d \
 | ------ | ------ | ---- |
 | PORT | 8080 | 外部访问端口（映射到容器 3099） |
 | LOG_LEVEL | info | 日志级别 |
+| SYSLOG_PORT | 514 | Syslog UDP 端口（接收 RouterOS 日志） |
 | NGINX_HTTP_PORT | 80 | Nginx HTTP 端口 |
 | NGINX_HTTPS_PORT | 443 | Nginx HTTPS 端口 |
 
@@ -332,6 +337,29 @@ routeros-web-manager/
 # 创建 API 用户（建议使用 full 权限组）
 /user add name=api password=yourpassword group=full
 ```
+
+### Syslog 配置（可选）
+
+如需使用 Syslog 日志接收功能，需要在 RouterOS 中配置远程 Syslog：
+
+```routeros
+# 添加远程 Syslog 服务器（替换为实际 IP 地址）
+/system logging action add name=remote target=remote remote=192.168.1.100 remote-port=514
+
+# 配置要发送的日志类型
+/system logging add topics=info action=remote
+/system logging add topics=warning action=remote
+/system logging add topics=error action=remote
+/system logging add topics=critical action=remote
+
+# 或者发送所有日志
+/system logging add topics=!debug action=remote
+```
+
+注意：
+- 需要在 Web 管理界面的「智能运维 → 系统设置 → Syslog 配置」中启用 Syslog 接收功能
+- Docker 部署时 UDP 514 端口已自动暴露
+- 确保防火墙允许 UDP 514 端口的入站流量
 
 ## AI-Ops 通知渠道配置
 

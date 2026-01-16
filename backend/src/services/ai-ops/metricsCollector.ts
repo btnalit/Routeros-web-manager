@@ -773,6 +773,9 @@ export class MetricsCollector implements IMetricsCollector {
     // 加载上次的字节快照
     this.loadLastBytesSnapshot();
 
+    // 从文件加载最近 1 小时的历史数据到内存（解决重启后数据不显示的问题）
+    this.loadTrafficHistoryFromFile();
+
     // 立即执行一次
     this.collectTrafficRates();
 
@@ -782,6 +785,76 @@ export class MetricsCollector implements IMetricsCollector {
     }, TRAFFIC_COLLECTION_INTERVAL_MS);
 
     logger.info('Traffic rate collection started');
+  }
+
+  /**
+   * 从文件加载最近 1 小时的流量历史数据到内存
+   * 解决服务重启后流量图表不显示的问题
+   */
+  private async loadTrafficHistoryFromFile(): Promise<void> {
+    try {
+      const now = Date.now();
+      const oneHourAgo = now - 3600000;
+      const dates = this.getDateRange(oneHourAgo, now);
+      
+      let loadedCount = 0;
+      
+      for (const dateStr of dates) {
+        const filePath = path.join(TRAFFIC_METRICS_DIR, `${dateStr}.json`);
+        
+        try {
+          const content = await fs.readFile(filePath, 'utf-8');
+          const data = JSON.parse(content) as Array<{
+            timestamp: number;
+            interfaces: { name: string; rxRate: number; txRate: number }[];
+          }>;
+
+          for (const entry of data) {
+            // 只加载最近 1 小时的数据
+            if (entry.timestamp >= oneHourAgo && entry.timestamp <= now) {
+              for (const iface of entry.interfaces) {
+                let history = this.trafficHistory.get(iface.name);
+                if (!history) {
+                  history = {
+                    name: iface.name,
+                    points: [],
+                    lastBytes: null,
+                  };
+                  this.trafficHistory.set(iface.name, history);
+                }
+                
+                // 添加历史数据点（避免重复）
+                const exists = history.points.some(p => p.timestamp === entry.timestamp);
+                if (!exists) {
+                  history.points.push({
+                    timestamp: entry.timestamp,
+                    rxRate: iface.rxRate,
+                    txRate: iface.txRate,
+                  });
+                  loadedCount++;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          // 文件不存在或读取失败，跳过
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            logger.debug(`Failed to load traffic history from ${dateStr}:`, error);
+          }
+        }
+      }
+
+      // 对每个接口的数据点按时间排序
+      for (const history of this.trafficHistory.values()) {
+        history.points.sort((a, b) => a.timestamp - b.timestamp);
+      }
+
+      if (loadedCount > 0) {
+        logger.info(`Loaded ${loadedCount} traffic history points from file for ${this.trafficHistory.size} interfaces`);
+      }
+    } catch (error) {
+      logger.error('Failed to load traffic history from file:', error);
+    }
   }
 
   /**

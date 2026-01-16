@@ -5,13 +5,11 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: AppLayout,
-    redirect: '/dashboard',
+    redirect: '/ai-ops',
     children: [
       {
         path: 'dashboard',
-        name: 'Dashboard',
-        component: () => import('@/views/DashboardView.vue'),
-        meta: { title: '系统监控' }
+        redirect: '/ai-ops'
       },
       {
         path: 'connection',
@@ -261,6 +259,36 @@ const routes: RouteRecordRaw[] = [
         name: 'AuditLog',
         component: () => import('@/views/AuditLogView.vue'),
         meta: { title: '审计日志' }
+      },
+      {
+        path: 'ai-ops/feedback',
+        name: 'FeedbackStats',
+        component: () => import('@/views/FeedbackStatsView.vue'),
+        meta: { title: '反馈统计' }
+      },
+      {
+        path: 'ai-ops/maintenance',
+        name: 'MaintenanceWindows',
+        component: () => import('@/views/MaintenanceWindowsView.vue'),
+        meta: { title: '维护窗口' }
+      },
+      {
+        path: 'ai-ops/known-issues',
+        name: 'KnownIssues',
+        component: () => import('@/views/KnownIssuesView.vue'),
+        meta: { title: '已知问题' }
+      },
+      {
+        path: 'ai-ops/decisions',
+        name: 'DecisionRules',
+        component: () => import('@/views/DecisionRulesView.vue'),
+        meta: { title: '决策规则' }
+      },
+      {
+        path: 'ai-ops/syslog',
+        name: 'SyslogConfig',
+        component: () => import('@/views/SyslogConfigView.vue'),
+        meta: { title: 'Syslog 配置' }
       }
     ]
   },

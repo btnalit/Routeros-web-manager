@@ -14,6 +14,13 @@
  * - /api/ai-ops/channels - 通知渠道管理
  * - /api/ai-ops/audit - 审计日志查询
  * - /api/ai-ops/dashboard - 运维仪表盘
+ * - /api/ai-ops/syslog - Syslog 管理 (Enhancement)
+ * - /api/ai-ops/filters - 过滤器管理 (Enhancement)
+ * - /api/ai-ops/analysis - 根因分析 (Enhancement)
+ * - /api/ai-ops/remediation - 修复方案 (Enhancement)
+ * - /api/ai-ops/decisions - 决策引擎 (Enhancement)
+ * - /api/ai-ops/feedback - 用户反馈 (Enhancement)
+ * - /api/ai-ops/cache - 缓存管理 (Enhancement)
  *
  * Requirements: 1.1-10.6
  */
@@ -89,6 +96,46 @@ import {
   getAuditLogs,
   // 仪表盘
   getDashboardData,
+  // AI-Ops Enhancement: Syslog 相关
+  getSyslogConfig,
+  updateSyslogConfig,
+  getSyslogStatus,
+  getSyslogEvents,
+  // AI-Ops Enhancement: 过滤器相关
+  getMaintenanceWindows,
+  createMaintenanceWindow,
+  updateMaintenanceWindow,
+  deleteMaintenanceWindow,
+  getKnownIssues,
+  createKnownIssue,
+  updateKnownIssue,
+  deleteKnownIssue,
+  // AI-Ops Enhancement: 分析相关
+  getAlertAnalysis,
+  refreshAlertAnalysis,
+  getAlertTimeline,
+  getRelatedAlerts,
+  // AI-Ops Enhancement: 修复方案相关
+  getRemediationPlan,
+  generateRemediationPlan,
+  executeRemediationPlan,
+  executeRemediationRollback,
+  // AI-Ops Enhancement: 决策相关
+  getDecisionRules,
+  getDecisionRuleById,
+  createDecisionRule,
+  updateDecisionRule,
+  deleteDecisionRule,
+  getDecisionHistory,
+  // AI-Ops Enhancement: 反馈相关
+  submitFeedback,
+  getFeedbackStats,
+  getRulesNeedingReview,
+  // AI-Ops Enhancement: 缓存管理相关
+  getFingerprintCacheStats,
+  clearFingerprintCache,
+  getAnalysisCacheStats,
+  clearAnalysisCache,
 } from '../controllers/aiOpsController';
 
 const router = Router();
@@ -302,6 +349,133 @@ router.get('/audit', getAuditLogs);
 
 // GET /api/ai-ops/dashboard - 获取仪表盘数据
 router.get('/dashboard', getDashboardData);
+
+
+// ==================== AI-Ops Enhancement: Syslog 管理 ====================
+// Requirements: 1.1, 1.7
+
+// GET /api/ai-ops/syslog/config - 获取 Syslog 配置
+router.get('/syslog/config', getSyslogConfig);
+
+// PUT /api/ai-ops/syslog/config - 更新 Syslog 配置
+router.put('/syslog/config', updateSyslogConfig);
+
+// GET /api/ai-ops/syslog/status - 获取 Syslog 服务状态
+router.get('/syslog/status', getSyslogStatus);
+
+// GET /api/ai-ops/syslog/events - 获取 Syslog 事件历史
+router.get('/syslog/events', getSyslogEvents);
+
+
+// ==================== AI-Ops Enhancement: 过滤器管理 ====================
+// Requirements: 5.7, 5.8
+
+// GET /api/ai-ops/filters/maintenance - 获取维护窗口列表
+router.get('/filters/maintenance', getMaintenanceWindows);
+
+// POST /api/ai-ops/filters/maintenance - 创建维护窗口
+router.post('/filters/maintenance', createMaintenanceWindow);
+
+// PUT /api/ai-ops/filters/maintenance/:id - 更新维护窗口
+router.put('/filters/maintenance/:id', updateMaintenanceWindow);
+
+// DELETE /api/ai-ops/filters/maintenance/:id - 删除维护窗口
+router.delete('/filters/maintenance/:id', deleteMaintenanceWindow);
+
+// GET /api/ai-ops/filters/known-issues - 获取已知问题列表
+router.get('/filters/known-issues', getKnownIssues);
+
+// POST /api/ai-ops/filters/known-issues - 创建已知问题
+router.post('/filters/known-issues', createKnownIssue);
+
+// PUT /api/ai-ops/filters/known-issues/:id - 更新已知问题
+router.put('/filters/known-issues/:id', updateKnownIssue);
+
+// DELETE /api/ai-ops/filters/known-issues/:id - 删除已知问题
+router.delete('/filters/known-issues/:id', deleteKnownIssue);
+
+
+// ==================== AI-Ops Enhancement: 根因分析 ====================
+// Requirements: 6.1, 6.2, 6.4
+
+// GET /api/ai-ops/analysis/:alertId - 获取告警的根因分析
+router.get('/analysis/:alertId', getAlertAnalysis);
+
+// POST /api/ai-ops/analysis/:alertId/refresh - 重新分析告警
+router.post('/analysis/:alertId/refresh', refreshAlertAnalysis);
+
+// GET /api/ai-ops/analysis/:alertId/timeline - 获取事件时间线
+router.get('/analysis/:alertId/timeline', getAlertTimeline);
+
+// GET /api/ai-ops/analysis/:alertId/related - 获取关联告警
+router.get('/analysis/:alertId/related', getRelatedAlerts);
+
+
+// ==================== AI-Ops Enhancement: 修复方案 ====================
+// Requirements: 7.1, 7.4
+
+// GET /api/ai-ops/remediation/:alertId - 获取修复方案
+router.get('/remediation/:alertId', getRemediationPlan);
+
+// POST /api/ai-ops/remediation/:alertId - 生成修复方案
+router.post('/remediation/:alertId', generateRemediationPlan);
+
+// POST /api/ai-ops/remediation/:planId/execute - 执行修复方案
+router.post('/remediation/:planId/execute', executeRemediationPlan);
+
+// POST /api/ai-ops/remediation/:planId/rollback - 执行回滚
+router.post('/remediation/:planId/rollback', executeRemediationRollback);
+
+
+// ==================== AI-Ops Enhancement: 决策引擎 ====================
+// Requirements: 8.8
+
+// GET /api/ai-ops/decisions/history - 获取决策历史（放在 rules/:id 之前）
+router.get('/decisions/history', getDecisionHistory);
+
+// GET /api/ai-ops/decisions/rules - 获取决策规则列表
+router.get('/decisions/rules', getDecisionRules);
+
+// GET /api/ai-ops/decisions/rules/:id - 获取单个决策规则
+router.get('/decisions/rules/:id', getDecisionRuleById);
+
+// POST /api/ai-ops/decisions/rules - 创建决策规则
+router.post('/decisions/rules', createDecisionRule);
+
+// PUT /api/ai-ops/decisions/rules/:id - 更新决策规则
+router.put('/decisions/rules/:id', updateDecisionRule);
+
+// DELETE /api/ai-ops/decisions/rules/:id - 删除决策规则
+router.delete('/decisions/rules/:id', deleteDecisionRule);
+
+
+// ==================== AI-Ops Enhancement: 用户反馈 ====================
+// Requirements: 10.1, 10.4, 10.5, 10.6
+
+// GET /api/ai-ops/feedback/stats - 获取反馈统计（放在其他路由之前）
+router.get('/feedback/stats', getFeedbackStats);
+
+// GET /api/ai-ops/feedback/review - 获取需要审查的规则
+router.get('/feedback/review', getRulesNeedingReview);
+
+// POST /api/ai-ops/feedback - 提交反馈
+router.post('/feedback', submitFeedback);
+
+
+// ==================== AI-Ops Enhancement: 缓存管理 ====================
+// Requirements: 2.5, 3.5
+
+// GET /api/ai-ops/cache/fingerprint/stats - 获取指纹缓存统计
+router.get('/cache/fingerprint/stats', getFingerprintCacheStats);
+
+// POST /api/ai-ops/cache/fingerprint/clear - 清空指纹缓存
+router.post('/cache/fingerprint/clear', clearFingerprintCache);
+
+// GET /api/ai-ops/cache/analysis/stats - 获取分析缓存统计
+router.get('/cache/analysis/stats', getAnalysisCacheStats);
+
+// POST /api/ai-ops/cache/analysis/clear - 清空分析缓存
+router.post('/cache/analysis/clear', clearAnalysisCache);
 
 
 export default router;

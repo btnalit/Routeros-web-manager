@@ -936,6 +936,638 @@ export const dashboardApi = {
   getData: () => api.get<ApiResponse<DashboardData>>('/ai-ops/dashboard')
 }
 
+// ==================== AI-Ops Enhancement: 类型定义 ====================
+// Requirements: 1.1-10.6
+
+/**
+ * 事件来源类型
+ */
+export type EventSource = 'syslog' | 'metrics' | 'manual' | 'api'
+
+/**
+ * Syslog 消息
+ */
+export interface SyslogMessage {
+  facility: number
+  severity: number
+  timestamp: string
+  hostname: string
+  topic: string
+  message: string
+  raw: string
+}
+
+/**
+ * Syslog 接收配置
+ */
+export interface SyslogReceiverConfig {
+  port: number
+  enabled: boolean
+}
+
+/**
+ * Syslog 服务状态
+ */
+export interface SyslogStatus {
+  running: boolean
+  port: number
+  messagesReceived: number
+  lastMessageAt?: number
+}
+
+/**
+ * Syslog 事件
+ */
+export interface SyslogEvent {
+  id: string
+  source: 'syslog'
+  timestamp: number
+  severity: AlertSeverity
+  category: string
+  message: string
+  rawData: SyslogMessage
+  metadata: {
+    hostname: string
+    facility: number
+    syslogSeverity: number
+  }
+}
+
+/**
+ * 周期性维护窗口配置
+ */
+export interface RecurringSchedule {
+  type: 'daily' | 'weekly' | 'monthly'
+  dayOfWeek?: number[]
+  dayOfMonth?: number[]
+}
+
+/**
+ * 维护窗口
+ */
+export interface MaintenanceWindow {
+  id: string
+  name: string
+  startTime: number
+  endTime: number
+  resources: string[]
+  recurring?: RecurringSchedule
+  createdAt?: number
+  updatedAt?: number
+}
+
+/**
+ * 创建维护窗口输入
+ */
+export type CreateMaintenanceWindowInput = Omit<MaintenanceWindow, 'id' | 'createdAt' | 'updatedAt'>
+
+/**
+ * 更新维护窗口输入
+ */
+export type UpdateMaintenanceWindowInput = Partial<Omit<MaintenanceWindow, 'id' | 'createdAt' | 'updatedAt'>>
+
+/**
+ * 已知问题
+ */
+export interface KnownIssue {
+  id: string
+  pattern: string
+  description: string
+  expiresAt?: number
+  autoResolve: boolean
+  createdAt?: number
+  updatedAt?: number
+}
+
+/**
+ * 创建已知问题输入
+ */
+export type CreateKnownIssueInput = Omit<KnownIssue, 'id' | 'createdAt' | 'updatedAt'>
+
+/**
+ * 更新已知问题输入
+ */
+export type UpdateKnownIssueInput = Partial<Omit<KnownIssue, 'id' | 'createdAt' | 'updatedAt'>>
+
+/**
+ * 根因
+ */
+export interface RootCause {
+  id: string
+  description: string
+  confidence: number
+  evidence: string[]
+  relatedAlerts: string[]
+}
+
+/**
+ * 时间线事件类型
+ */
+export type TimelineEventType = 'trigger' | 'symptom' | 'cause' | 'effect'
+
+/**
+ * 时间线事件
+ */
+export interface TimelineEvent {
+  timestamp: number
+  eventId: string
+  description: string
+  type: TimelineEventType
+}
+
+/**
+ * 事件时间线
+ */
+export interface EventTimeline {
+  events: TimelineEvent[]
+  startTime: number
+  endTime: number
+}
+
+/**
+ * 影响范围
+ */
+export type ImpactScope = 'local' | 'partial' | 'widespread'
+
+/**
+ * 影响评估
+ */
+export interface ImpactAssessment {
+  scope: ImpactScope
+  affectedResources: string[]
+  estimatedUsers: number
+  services: string[]
+  networkSegments: string[]
+}
+
+/**
+ * 相似历史事件
+ */
+export interface SimilarIncident {
+  id: string
+  timestamp: number
+  similarity: number
+  resolution?: string
+}
+
+/**
+ * 根因分析结果
+ */
+export interface RootCauseAnalysis {
+  id: string
+  alertId: string
+  timestamp: number
+  rootCauses: RootCause[]
+  timeline: EventTimeline
+  impact: ImpactAssessment
+  similarIncidents?: SimilarIncident[]
+}
+
+/**
+ * 修复步骤验证
+ */
+export interface StepVerification {
+  command: string
+  expectedResult: string
+}
+
+/**
+ * 修复步骤
+ */
+export interface RemediationStep {
+  order: number
+  description: string
+  command: string
+  verification: StepVerification
+  autoExecutable: boolean
+  riskLevel: RiskLevel
+  estimatedDuration: number
+}
+
+/**
+ * 回滚步骤
+ */
+export interface RollbackStep {
+  order: number
+  description: string
+  command: string
+  condition?: string
+}
+
+/**
+ * 修复方案状态
+ */
+export type RemediationPlanStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'rolled_back'
+
+/**
+ * 修复方案
+ */
+export interface RemediationPlan {
+  id: string
+  alertId: string
+  rootCauseId: string
+  timestamp: number
+  steps: RemediationStep[]
+  rollback: RollbackStep[]
+  overallRisk: RiskLevel
+  estimatedDuration: number
+  requiresConfirmation: boolean
+  status: RemediationPlanStatus
+}
+
+/**
+ * 执行结果
+ */
+export interface ExecutionResult {
+  stepOrder: number
+  success: boolean
+  output?: string
+  error?: string
+  duration: number
+  verificationPassed?: boolean
+}
+
+/**
+ * 决策类型
+ */
+export type DecisionType = 'auto_execute' | 'notify_and_wait' | 'escalate' | 'silence'
+
+/**
+ * 决策条件运算符
+ */
+export type DecisionConditionOperator = 'gt' | 'lt' | 'eq' | 'gte' | 'lte'
+
+/**
+ * 决策条件
+ */
+export interface DecisionCondition {
+  factor: string
+  operator: DecisionConditionOperator
+  value: number
+}
+
+/**
+ * 决策规则
+ */
+export interface DecisionRule {
+  id: string
+  name: string
+  priority: number
+  conditions: DecisionCondition[]
+  action: DecisionType
+  enabled: boolean
+  createdAt?: number
+  updatedAt?: number
+}
+
+/**
+ * 创建决策规则输入
+ */
+export type CreateDecisionRuleInput = Omit<DecisionRule, 'id' | 'createdAt' | 'updatedAt'>
+
+/**
+ * 更新决策规则输入
+ */
+export type UpdateDecisionRuleInput = Partial<Omit<DecisionRule, 'id' | 'createdAt' | 'updatedAt'>>
+
+/**
+ * 决策因子评分
+ */
+export interface DecisionFactorScore {
+  name: string
+  score: number
+  weight: number
+}
+
+/**
+ * 决策执行结果
+ */
+export interface DecisionExecutionResult {
+  success: boolean
+  details: string
+}
+
+/**
+ * 决策
+ */
+export interface Decision {
+  id: string
+  alertId: string
+  timestamp: number
+  action: DecisionType
+  reasoning: string
+  factors: DecisionFactorScore[]
+  matchedRule?: string
+  executed: boolean
+  executionResult?: DecisionExecutionResult
+}
+
+/**
+ * 告警反馈
+ */
+export interface AlertFeedback {
+  id: string
+  alertId: string
+  timestamp: number
+  userId?: string
+  useful: boolean
+  comment?: string
+  tags?: string[]
+}
+
+/**
+ * 创建告警反馈输入
+ */
+export type CreateAlertFeedbackInput = Omit<AlertFeedback, 'id' | 'timestamp'>
+
+/**
+ * 反馈统计
+ */
+export interface FeedbackStats {
+  ruleId: string
+  totalAlerts: number
+  usefulCount: number
+  notUsefulCount: number
+  falsePositiveRate: number
+  lastUpdated: number
+}
+
+/**
+ * 指纹缓存配置
+ */
+export interface FingerprintCacheConfig {
+  defaultTtlMs: number
+  cleanupIntervalMs: number
+}
+
+/**
+ * 指纹缓存统计
+ */
+export interface FingerprintCacheStats {
+  size: number
+  suppressedCount: number
+  config: FingerprintCacheConfig
+}
+
+/**
+ * 分析缓存配置
+ */
+export interface AnalysisCacheConfig {
+  defaultTtlMs: number
+  maxSize: number
+}
+
+/**
+ * 分析缓存统计
+ */
+export interface AnalysisCacheStats {
+  size: number
+  hitCount: number
+  missCount: number
+  config: AnalysisCacheConfig
+}
+
+// ==================== AI-Ops Enhancement: Syslog API ====================
+// Requirements: 1.1, 1.7
+
+export const syslogApi = {
+  /**
+   * 获取 Syslog 配置
+   */
+  getConfig: () => api.get<ApiResponse<SyslogReceiverConfig>>('/ai-ops/syslog/config'),
+
+  /**
+   * 更新 Syslog 配置
+   */
+  updateConfig: (config: Partial<SyslogReceiverConfig>) =>
+    api.put<ApiResponse<SyslogReceiverConfig>>('/ai-ops/syslog/config', config),
+
+  /**
+   * 获取 Syslog 服务状态
+   */
+  getStatus: () => api.get<ApiResponse<SyslogStatus>>('/ai-ops/syslog/status'),
+
+  /**
+   * 获取 Syslog 事件历史
+   */
+  getEvents: (options?: { from?: number; to?: number; limit?: number }) =>
+    api.get<ApiResponse<SyslogEvent[]>>('/ai-ops/syslog/events', { params: options })
+}
+
+// ==================== AI-Ops Enhancement: 过滤器 API ====================
+// Requirements: 5.7, 5.8
+
+export const filtersApi = {
+  // 维护窗口管理
+  /**
+   * 获取维护窗口列表
+   */
+  getMaintenanceWindows: () =>
+    api.get<ApiResponse<MaintenanceWindow[]>>('/ai-ops/filters/maintenance'),
+
+  /**
+   * 创建维护窗口
+   */
+  createMaintenanceWindow: (window: CreateMaintenanceWindowInput) =>
+    api.post<ApiResponse<MaintenanceWindow>>('/ai-ops/filters/maintenance', window),
+
+  /**
+   * 更新维护窗口
+   */
+  updateMaintenanceWindow: (id: string, updates: UpdateMaintenanceWindowInput) =>
+    api.put<ApiResponse<MaintenanceWindow>>(`/ai-ops/filters/maintenance/${id}`, updates),
+
+  /**
+   * 删除维护窗口
+   */
+  deleteMaintenanceWindow: (id: string) =>
+    api.delete<ApiResponse<void>>(`/ai-ops/filters/maintenance/${id}`),
+
+  // 已知问题管理
+  /**
+   * 获取已知问题列表
+   */
+  getKnownIssues: () => api.get<ApiResponse<KnownIssue[]>>('/ai-ops/filters/known-issues'),
+
+  /**
+   * 创建已知问题
+   */
+  createKnownIssue: (issue: CreateKnownIssueInput) =>
+    api.post<ApiResponse<KnownIssue>>('/ai-ops/filters/known-issues', issue),
+
+  /**
+   * 更新已知问题
+   */
+  updateKnownIssue: (id: string, updates: UpdateKnownIssueInput) =>
+    api.put<ApiResponse<KnownIssue>>(`/ai-ops/filters/known-issues/${id}`, updates),
+
+  /**
+   * 删除已知问题
+   */
+  deleteKnownIssue: (id: string) =>
+    api.delete<ApiResponse<void>>(`/ai-ops/filters/known-issues/${id}`)
+}
+
+// ==================== AI-Ops Enhancement: 分析 API ====================
+// Requirements: 6.1, 6.2, 6.4
+
+export const analysisApi = {
+  /**
+   * 获取告警的根因分析
+   */
+  getAnalysis: (alertId: string) =>
+    api.get<ApiResponse<RootCauseAnalysis>>(`/ai-ops/analysis/${alertId}`),
+
+  /**
+   * 重新分析告警
+   */
+  refreshAnalysis: (alertId: string) =>
+    api.post<ApiResponse<RootCauseAnalysis>>(`/ai-ops/analysis/${alertId}/refresh`),
+
+  /**
+   * 获取事件时间线
+   */
+  getTimeline: (alertId: string) =>
+    api.get<ApiResponse<EventTimeline>>(`/ai-ops/analysis/${alertId}/timeline`),
+
+  /**
+   * 获取关联告警
+   */
+  getRelatedAlerts: (alertId: string, windowMs?: number) =>
+    api.get<ApiResponse<AlertEvent[]>>(`/ai-ops/analysis/${alertId}/related`, {
+      params: windowMs ? { windowMs } : undefined
+    })
+}
+
+// ==================== AI-Ops Enhancement: 修复方案 API ====================
+// Requirements: 7.1, 7.4
+
+export const remediationPlansApi = {
+  /**
+   * 获取修复方案
+   */
+  getPlan: (alertId: string) =>
+    api.get<ApiResponse<RemediationPlan | null>>(`/ai-ops/remediation/${alertId}`),
+
+  /**
+   * 生成修复方案
+   */
+  generatePlan: (alertId: string) =>
+    api.post<ApiResponse<RemediationPlan>>(`/ai-ops/remediation/${alertId}`),
+
+  /**
+   * 执行修复方案（所有自动步骤）
+   */
+  executePlan: (planId: string) =>
+    api.post<ApiResponse<ExecutionResult[]>>(`/ai-ops/remediation/${planId}/execute`),
+
+  /**
+   * 执行单个步骤
+   */
+  executeStep: (planId: string, stepOrder: number) =>
+    api.post<ApiResponse<ExecutionResult>>(`/ai-ops/remediation/${planId}/execute`, { stepOrder }),
+
+  /**
+   * 执行回滚
+   */
+  executeRollback: (planId: string) =>
+    api.post<ApiResponse<ExecutionResult[]>>(`/ai-ops/remediation/${planId}/rollback`)
+}
+
+// ==================== AI-Ops Enhancement: 决策 API ====================
+// Requirements: 8.8
+
+export const decisionsApi = {
+  /**
+   * 获取决策规则列表
+   */
+  getRules: () => api.get<ApiResponse<DecisionRule[]>>('/ai-ops/decisions/rules'),
+
+  /**
+   * 获取单个决策规则
+   */
+  getRuleById: (id: string) => api.get<ApiResponse<DecisionRule>>(`/ai-ops/decisions/rules/${id}`),
+
+  /**
+   * 创建决策规则
+   */
+  createRule: (rule: CreateDecisionRuleInput) =>
+    api.post<ApiResponse<DecisionRule>>('/ai-ops/decisions/rules', rule),
+
+  /**
+   * 更新决策规则
+   */
+  updateRule: (id: string, updates: UpdateDecisionRuleInput) =>
+    api.put<ApiResponse<DecisionRule>>(`/ai-ops/decisions/rules/${id}`, updates),
+
+  /**
+   * 删除决策规则
+   */
+  deleteRule: (id: string) => api.delete<ApiResponse<void>>(`/ai-ops/decisions/rules/${id}`),
+
+  /**
+   * 获取决策历史
+   */
+  getHistory: (options?: { alertId?: string; limit?: number }) =>
+    api.get<ApiResponse<Decision[]>>('/ai-ops/decisions/history', { params: options })
+}
+
+// ==================== AI-Ops Enhancement: 反馈 API ====================
+// Requirements: 10.1, 10.4, 10.5, 10.6
+
+export const feedbackApi = {
+  /**
+   * 提交反馈
+   */
+  submit: (feedback: CreateAlertFeedbackInput) =>
+    api.post<ApiResponse<AlertFeedback>>('/ai-ops/feedback', feedback),
+
+  /**
+   * 获取反馈统计（所有规则或指定规则）
+   */
+  getStats: (ruleId?: string) =>
+    api.get<ApiResponse<FeedbackStats | FeedbackStats[]>>('/ai-ops/feedback/stats', {
+      params: ruleId ? { ruleId } : undefined
+    }),
+
+  /**
+   * 获取需要审查的规则
+   */
+  getRulesNeedingReview: (threshold?: number) =>
+    api.get<ApiResponse<FeedbackStats[]>>('/ai-ops/feedback/review', {
+      params: threshold ? { threshold } : undefined
+    })
+}
+
+// ==================== AI-Ops Enhancement: 缓存管理 API ====================
+// Requirements: 2.5, 3.5
+
+export const cacheApi = {
+  /**
+   * 获取指纹缓存统计
+   */
+  getFingerprintStats: () =>
+    api.get<ApiResponse<FingerprintCacheStats>>('/ai-ops/cache/fingerprint/stats'),
+
+  /**
+   * 清空指纹缓存
+   */
+  clearFingerprintCache: () =>
+    api.post<ApiResponse<{ message: string }>>('/ai-ops/cache/fingerprint/clear'),
+
+  /**
+   * 获取分析缓存统计
+   */
+  getAnalysisStats: () =>
+    api.get<ApiResponse<AnalysisCacheStats>>('/ai-ops/cache/analysis/stats'),
+
+  /**
+   * 清空分析缓存
+   */
+  clearAnalysisCache: () =>
+    api.post<ApiResponse<{ message: string }>>('/ai-ops/cache/analysis/clear')
+}
+
 // ==================== 导出统一 API 对象 ====================
 
 export const aiOpsApi = {
@@ -949,7 +1581,15 @@ export const aiOpsApi = {
   remediations: remediationsApi,
   notificationChannels: notificationChannelsApi,
   audit: auditApi,
-  dashboard: dashboardApi
+  dashboard: dashboardApi,
+  // AI-Ops Enhancement APIs
+  syslog: syslogApi,
+  filters: filtersApi,
+  analysis: analysisApi,
+  remediationPlans: remediationPlansApi,
+  decisions: decisionsApi,
+  feedback: feedbackApi,
+  cache: cacheApi
 }
 
 export default aiOpsApi
