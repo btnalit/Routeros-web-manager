@@ -28,13 +28,13 @@ import {
   IFaultHealer,
   AlertEvent,
   AlertOperator,
-  MetricType,
 } from '../../types/ai-ops';
 import { logger } from '../../utils/logger';
 import { auditLogger } from './auditLogger';
 import { notificationService } from './notificationService';
 import { configSnapshotService } from './configSnapshotService';
-import { routerosClient } from '../routerosClient';
+import { connectionPool } from '../connectionPool';
+import { deviceService } from '../deviceService';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'ai-ops');
 const PATTERNS_DIR = path.join(DATA_DIR, 'patterns');
@@ -476,6 +476,12 @@ export class FaultHealer implements IFaultHealer {
    * 执行 RouterOS 脚本
    */
   private async executeScript(script: string): Promise<{ output: string; error?: string }> {
+    // TODO: Support multi-device. Default to first.
+    const devices = await deviceService.getAllDevices();
+    if (devices.length === 0) return { output: '', error: 'No devices found' };
+    const deviceId = devices[0].id;
+    const client = await connectionPool.getClient(deviceId);
+
     const lines = script
       .split('\n')
       .map((line) => line.trim())
@@ -502,7 +508,7 @@ export class FaultHealer implements IFaultHealer {
           continue;
         }
 
-        const response = await routerosClient.executeRaw(apiCommand, params);
+        const response = await client.executeRaw(apiCommand, params);
 
         if (response !== null && response !== undefined) {
           if (Array.isArray(response) && response.length > 0) {
@@ -715,8 +721,13 @@ export class FaultHealer implements IFaultHealer {
 
     // 执行修复脚本（Requirements 7.6）
     try {
+      // TODO: Support multi-device
+      const devices = await deviceService.getAllDevices();
+      if (devices.length === 0) throw new Error('No devices found');
+      const client = await connectionPool.getClient(devices[0].id);
+
       // 检查 RouterOS 连接
-      if (!routerosClient.isConnected()) {
+      if (!client.isConnected()) {
         throw new Error('RouterOS not connected');
       }
 

@@ -131,6 +131,7 @@ export interface AlertEvent {
   id: string;
   ruleId: string;
   ruleName: string;
+  deviceId?: string; // 设备ID
   severity: AlertSeverity;
   metric: MetricType;
   currentValue: number;
@@ -523,7 +524,7 @@ export interface AIOpsData {
 export interface IMetricsCollector {
   start(): void;
   stop(): void;
-  collectNow(): Promise<{ system: SystemMetrics; interfaces: InterfaceMetrics[] }>;
+  collectNow(): Promise<{ system: SystemMetrics; interfaces: InterfaceMetrics[] } | null>;
   getHistory(metric: string, from: number, to: number): Promise<MetricPoint[]>;
   getLatest(): Promise<{ system: SystemMetrics; interfaces: InterfaceMetrics[] } | null>;
 }

@@ -1,18 +1,7 @@
 /**
  * MetricsCollector 指标采集服务
  * 负责周期性采集 RouterOS 设备的运行指标
- *
- * Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 1.10
- * - 1.1: 按配置的采集间隔周期性采集指标
- * - 1.2: 获取 CPU 使用率百分比
- * - 1.3: 获取已用内存、可用内存和使用率
- * - 1.4: 获取磁盘总容量、已用容量和使用率
- * - 1.5: 获取每个接口的收发流量、包数和错误数
- * - 1.6: 获取接口的运行状态（up/down）和连接状态
- * - 1.7: 将指标数据持久化存储
- * - 1.8: 保留最近 7 天的历史数据
- * - 1.9: 自动清理过期数据
- * - 1.10: 采集错误时记录日志并在下一周期重试
+ * 支持多设备采集
  */
 
 import fs from 'fs/promises';
@@ -24,16 +13,15 @@ import {
   SystemMetrics,
   InterfaceMetrics,
 } from '../../types/ai-ops';
-import { routerosClient } from '../routerosClient';
+import { connectionPool } from '../connectionPool';
+import { deviceService } from '../deviceService';
+import { RouterOSClient } from '../routerosClient';
 import { logger } from '../../utils/logger';
 
 // 告警评估回调类型
-type AlertEvaluationCallback = (metrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] }) => Promise<void>;
+type AlertEvaluationCallback = (deviceId: string, metrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] }) => Promise<void>;
 
-const METRICS_DIR = path.join(process.cwd(), 'data', 'ai-ops', 'metrics');
-const SYSTEM_METRICS_DIR = path.join(METRICS_DIR, 'system');
-const INTERFACE_METRICS_DIR = path.join(METRICS_DIR, 'interfaces');
-const TRAFFIC_METRICS_DIR = path.join(METRICS_DIR, 'traffic');
+const METRICS_BASE_DIR = path.join(process.cwd(), 'data', 'ai-ops', 'metrics');
 const CONFIG_FILE = path.join(process.cwd(), 'data', 'ai-ops', 'metrics-config.json');
 
 const DEFAULT_CONFIG: MetricsCollectorConfig = {
@@ -44,7 +32,7 @@ const DEFAULT_CONFIG: MetricsCollectorConfig = {
 
 // Traffic collection configuration
 const TRAFFIC_COLLECTION_INTERVAL_MS = 10000; // 10 seconds
-const TRAFFIC_MAX_INTERFACES = 50; // Maximum interfaces to track
+const TRAFFIC_MAX_INTERFACES = 50; // Maximum interfaces to track per device
 
 /**
  * 获取日期字符串 (YYYY-MM-DD)
@@ -55,19 +43,25 @@ function getDateString(timestamp: number): string {
 }
 
 /**
+ * 获取设备指标目录
+ */
+function getDeviceMetricsDir(deviceId: string, type: 'system' | 'interfaces' | 'traffic'): string {
+  return path.join(METRICS_BASE_DIR, deviceId, type);
+}
+
+/**
  * 获取系统指标文件路径
  */
-function getSystemMetricsFilePath(dateStr: string): string {
-  return path.join(SYSTEM_METRICS_DIR, `${dateStr}.json`);
+function getSystemMetricsFilePath(deviceId: string, dateStr: string): string {
+  return path.join(getDeviceMetricsDir(deviceId, 'system'), `${dateStr}.json`);
 }
 
 /**
  * 获取接口指标文件路径
  */
-function getInterfaceMetricsFilePath(dateStr: string): string {
-  return path.join(INTERFACE_METRICS_DIR, `${dateStr}.json`);
+function getInterfaceMetricsFilePath(deviceId: string, dateStr: string): string {
+  return path.join(getDeviceMetricsDir(deviceId, 'interfaces'), `${dateStr}.json`);
 }
-
 
 /**
  * 存储的系统指标数据点
@@ -107,31 +101,34 @@ interface InterfaceTrafficHistory {
   } | null;
 }
 
-export class MetricsCollector implements IMetricsCollector {
+export class MetricsCollector {
   private config: MetricsCollectorConfig = DEFAULT_CONFIG;
   private intervalId: NodeJS.Timeout | null = null;
   private trafficIntervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
-  private latestMetrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] } | null = null;
-  private consecutiveErrors: number = 0;
+
+  // 缓存最新指标: Map<deviceId, metrics>
+  private latestMetrics: Map<string, { system: SystemMetrics; interfaces: InterfaceMetrics[] }> = new Map();
+
+  private consecutiveErrors: Map<string, number> = new Map();
   private readonly MAX_CONSECUTIVE_ERRORS = 3;
   
-  // Traffic rate tracking (in-memory for fast access)
-  private trafficHistory: Map<string, InterfaceTrafficHistory> = new Map();
+  // Traffic rate tracking: Map<deviceId, Map<interfaceName, history>>
+  private trafficHistory: Map<string, Map<string, InterfaceTrafficHistory>> = new Map();
   
   // 告警评估回调
   private alertEvaluationCallback: AlertEvaluationCallback | null = null;
 
   /**
-   * 确保目录存在
+   * 确保设备目录存在
    */
-  private async ensureDirectories(): Promise<void> {
+  private async ensureDeviceDirectories(deviceId: string): Promise<void> {
     try {
-      await fs.mkdir(SYSTEM_METRICS_DIR, { recursive: true });
-      await fs.mkdir(INTERFACE_METRICS_DIR, { recursive: true });
-      await fs.mkdir(TRAFFIC_METRICS_DIR, { recursive: true });
+      await fs.mkdir(getDeviceMetricsDir(deviceId, 'system'), { recursive: true });
+      await fs.mkdir(getDeviceMetricsDir(deviceId, 'interfaces'), { recursive: true });
+      await fs.mkdir(getDeviceMetricsDir(deviceId, 'traffic'), { recursive: true });
     } catch (error) {
-      logger.error('Failed to create metrics directories:', error);
+      logger.error(`Failed to create metrics directories for device ${deviceId}:`, error);
     }
   }
 
@@ -140,6 +137,7 @@ export class MetricsCollector implements IMetricsCollector {
    */
   private async loadConfig(): Promise<void> {
     try {
+      await fs.mkdir(path.dirname(CONFIG_FILE), { recursive: true });
       const data = await fs.readFile(CONFIG_FILE, 'utf-8');
       this.config = { ...DEFAULT_CONFIG, ...JSON.parse(data) };
     } catch (error) {
@@ -154,7 +152,6 @@ export class MetricsCollector implements IMetricsCollector {
    * 保存配置
    */
   async saveConfig(config: Partial<MetricsCollectorConfig>): Promise<MetricsCollectorConfig> {
-    await this.ensureDirectories();
     this.config = { ...this.config, ...config };
     await fs.writeFile(CONFIG_FILE, JSON.stringify(this.config, null, 2), 'utf-8');
     return this.config;
@@ -170,16 +167,12 @@ export class MetricsCollector implements IMetricsCollector {
   /**
    * 读取指定日期的系统指标文件
    */
-  private async readSystemMetricsFile(dateStr: string): Promise<StoredSystemMetrics[]> {
-    const filePath = getSystemMetricsFilePath(dateStr);
+  private async readSystemMetricsFile(deviceId: string, dateStr: string): Promise<StoredSystemMetrics[]> {
+    const filePath = getSystemMetricsFilePath(deviceId, dateStr);
     try {
       const data = await fs.readFile(filePath, 'utf-8');
       return JSON.parse(data) as StoredSystemMetrics[];
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return [];
-      }
-      logger.error(`Failed to read system metrics file ${dateStr}:`, error);
       return [];
     }
   }
@@ -187,24 +180,20 @@ export class MetricsCollector implements IMetricsCollector {
   /**
    * 写入系统指标文件
    */
-  private async writeSystemMetricsFile(dateStr: string, data: StoredSystemMetrics[]): Promise<void> {
-    const filePath = getSystemMetricsFilePath(dateStr);
+  private async writeSystemMetricsFile(deviceId: string, dateStr: string, data: StoredSystemMetrics[]): Promise<void> {
+    const filePath = getSystemMetricsFilePath(deviceId, dateStr);
     await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
   }
 
   /**
    * 读取指定日期的接口指标文件
    */
-  private async readInterfaceMetricsFile(dateStr: string): Promise<StoredInterfaceMetrics[]> {
-    const filePath = getInterfaceMetricsFilePath(dateStr);
+  private async readInterfaceMetricsFile(deviceId: string, dateStr: string): Promise<StoredInterfaceMetrics[]> {
+    const filePath = getInterfaceMetricsFilePath(deviceId, dateStr);
     try {
       const data = await fs.readFile(filePath, 'utf-8');
       return JSON.parse(data) as StoredInterfaceMetrics[];
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return [];
-      }
-      logger.error(`Failed to read interface metrics file ${dateStr}:`, error);
       return [];
     }
   }
@@ -212,8 +201,8 @@ export class MetricsCollector implements IMetricsCollector {
   /**
    * 写入接口指标文件
    */
-  private async writeInterfaceMetricsFile(dateStr: string, data: StoredInterfaceMetrics[]): Promise<void> {
-    const filePath = getInterfaceMetricsFilePath(dateStr);
+  private async writeInterfaceMetricsFile(deviceId: string, dateStr: string, data: StoredInterfaceMetrics[]): Promise<void> {
+    const filePath = getInterfaceMetricsFilePath(deviceId, dateStr);
     await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
   }
 
@@ -221,9 +210,8 @@ export class MetricsCollector implements IMetricsCollector {
   /**
    * 从 RouterOS 采集系统指标
    */
-  private async collectSystemMetrics(): Promise<SystemMetrics> {
-    // 获取系统资源信息
-    const resources = await routerosClient.print<{
+  private async collectSystemMetrics(client: RouterOSClient): Promise<SystemMetrics> {
+    const resources = await client.print<{
       'cpu-load': string;
       'free-memory': string;
       'total-memory': string;
@@ -237,23 +225,15 @@ export class MetricsCollector implements IMetricsCollector {
     }
 
     const resource = resources[0];
-
-    // 解析 CPU 使用率
     const cpuUsage = parseInt(resource['cpu-load'] || '0', 10);
-
-    // 解析内存信息 (bytes)
     const totalMemory = parseInt(resource['total-memory'] || '0', 10);
     const freeMemory = parseInt(resource['free-memory'] || '0', 10);
     const usedMemory = totalMemory - freeMemory;
     const memoryUsage = totalMemory > 0 ? Math.round((usedMemory / totalMemory) * 100) : 0;
-
-    // 解析磁盘信息 (bytes)
     const totalDisk = parseInt(resource['total-hdd-space'] || '0', 10);
     const freeDisk = parseInt(resource['free-hdd-space'] || '0', 10);
     const usedDisk = totalDisk - freeDisk;
     const diskUsage = totalDisk > 0 ? Math.round((usedDisk / totalDisk) * 100) : 0;
-
-    // 解析运行时间 (RouterOS 格式: 1w2d3h4m5s)
     const uptimeStr = resource.uptime || '0s';
     const uptime = this.parseUptime(uptimeStr);
 
@@ -277,7 +257,6 @@ export class MetricsCollector implements IMetricsCollector {
 
   /**
    * 解析 RouterOS 运行时间格式
-   * 格式: 1w2d3h4m5s
    */
   private parseUptime(uptimeStr: string): number {
     let seconds = 0;
@@ -287,35 +266,22 @@ export class MetricsCollector implements IMetricsCollector {
     while ((match = regex.exec(uptimeStr)) !== null) {
       const value = parseInt(match[1], 10);
       const unit = match[2];
-
       switch (unit) {
-        case 'w':
-          seconds += value * 7 * 24 * 60 * 60;
-          break;
-        case 'd':
-          seconds += value * 24 * 60 * 60;
-          break;
-        case 'h':
-          seconds += value * 60 * 60;
-          break;
-        case 'm':
-          seconds += value * 60;
-          break;
-        case 's':
-          seconds += value;
-          break;
+        case 'w': seconds += value * 7 * 24 * 60 * 60; break;
+        case 'd': seconds += value * 24 * 60 * 60; break;
+        case 'h': seconds += value * 60 * 60; break;
+        case 'm': seconds += value * 60; break;
+        case 's': seconds += value; break;
       }
     }
-
     return seconds;
   }
 
   /**
    * 从 RouterOS 采集接口指标
    */
-  private async collectInterfaceMetrics(): Promise<InterfaceMetrics[]> {
-    // 获取接口列表
-    const interfaces = await routerosClient.print<{
+  private async collectInterfaceMetrics(client: RouterOSClient): Promise<InterfaceMetrics[]> {
+    const interfaces = await client.print<{
       name: string;
       running: string;
       disabled: string;
@@ -348,6 +314,7 @@ export class MetricsCollector implements IMetricsCollector {
    * 存储指标数据
    */
   private async storeMetrics(
+    deviceId: string,
     system: SystemMetrics,
     interfaces: InterfaceMetrics[]
   ): Promise<void> {
@@ -355,61 +322,67 @@ export class MetricsCollector implements IMetricsCollector {
     const dateStr = getDateString(timestamp);
 
     // 存储系统指标
-    const systemData = await this.readSystemMetricsFile(dateStr);
+    const systemData = await this.readSystemMetricsFile(deviceId, dateStr);
     systemData.push({ timestamp, metrics: system });
-    await this.writeSystemMetricsFile(dateStr, systemData);
+    await this.writeSystemMetricsFile(deviceId, dateStr, systemData);
 
     // 存储接口指标
-    const interfaceData = await this.readInterfaceMetricsFile(dateStr);
+    const interfaceData = await this.readInterfaceMetricsFile(deviceId, dateStr);
     interfaceData.push({ timestamp, interfaces });
-    await this.writeInterfaceMetricsFile(dateStr, interfaceData);
-
-    logger.debug(`Metrics stored for ${dateStr}`);
+    await this.writeInterfaceMetricsFile(deviceId, dateStr, interfaceData);
   }
 
   /**
-   * 执行一次采集
+   * 执行一次采集（所有设备）
    */
   private async doCollect(): Promise<void> {
+    const devices = await deviceService.getAllDevices();
+
+    for (const device of devices) {
+      await this.collectForDevice(device.id);
+    }
+  }
+
+  /**
+   * 为单个设备采集指标
+   */
+  private async collectForDevice(deviceId: string): Promise<void> {
     try {
-      // 检查 RouterOS 连接
-      if (!routerosClient.isConnected()) {
-        logger.warn('RouterOS not connected, skipping metrics collection');
-        this.consecutiveErrors++;
+      await this.ensureDeviceDirectories(deviceId);
+
+      const client = await connectionPool.getClient(deviceId);
+      if (!client.isConnected()) {
+        // Skip logging if expected (handled by pool)
         return;
       }
 
-      const system = await this.collectSystemMetrics();
-      const interfaces = await this.collectInterfaceMetrics();
+      const system = await this.collectSystemMetrics(client);
+      const interfaces = await this.collectInterfaceMetrics(client);
 
       // 更新最新指标缓存
-      this.latestMetrics = { system, interfaces };
+      this.latestMetrics.set(deviceId, { system, interfaces });
 
       // 持久化存储
-      await this.storeMetrics(system, interfaces);
+      await this.storeMetrics(deviceId, system, interfaces);
 
       // 重置错误计数
-      this.consecutiveErrors = 0;
+      this.consecutiveErrors.set(deviceId, 0);
 
-      // 触发告警评估（如果已注册回调）
+      // 触发告警评估
       if (this.alertEvaluationCallback) {
         try {
-          await this.alertEvaluationCallback({ system, interfaces });
+          await this.alertEvaluationCallback(deviceId, { system, interfaces });
         } catch (error) {
-          logger.error('Alert evaluation failed:', error);
+          logger.error(`Alert evaluation failed for ${deviceId}:`, error);
         }
       }
 
-      logger.debug('Metrics collection completed successfully');
     } catch (error) {
-      this.consecutiveErrors++;
-      logger.error(`Metrics collection failed (attempt ${this.consecutiveErrors}):`, error);
+      const currentErrors = (this.consecutiveErrors.get(deviceId) || 0) + 1;
+      this.consecutiveErrors.set(deviceId, currentErrors);
 
-      // 连续错误超过阈值时记录警告
-      if (this.consecutiveErrors >= this.MAX_CONSECUTIVE_ERRORS) {
-        logger.warn(
-          `Metrics collection has failed ${this.consecutiveErrors} consecutive times`
-        );
+      if (currentErrors <= this.MAX_CONSECUTIVE_ERRORS) {
+        logger.error(`Metrics collection failed for ${deviceId}:`, error);
       }
     }
   }
@@ -419,38 +392,86 @@ export class MetricsCollector implements IMetricsCollector {
    */
   start(): void {
     if (this.isRunning) {
-      logger.warn('MetricsCollector is already running');
       return;
     }
 
-    this.loadConfig().then(() => {
+    this.loadConfig().then(async () => {
+      // 执行数据迁移 (Phase 1 补充)
+      await this.migrateLegacyData();
+
       if (!this.config.enabled) {
-        logger.info('MetricsCollector is disabled');
         return;
       }
 
-      this.ensureDirectories().then(() => {
-        // 立即执行一次采集
+      // 立即执行一次采集
+      this.doCollect();
+
+      // 设置定时采集（系统指标）
+      this.intervalId = setInterval(() => {
         this.doCollect();
+      }, this.config.intervalMs);
 
-        // 设置定时采集（系统指标）
-        this.intervalId = setInterval(() => {
-          this.doCollect();
-        }, this.config.intervalMs);
+      // 启动流量速率采集
+      this.startTrafficCollection();
 
-        // 启动流量速率采集（更频繁，10秒一次）
-        this.startTrafficCollection();
-
-        this.isRunning = true;
-        logger.info(
-          `MetricsCollector started with interval ${this.config.intervalMs}ms, traffic collection every ${TRAFFIC_COLLECTION_INTERVAL_MS}ms`
-        );
-
-        // 启动时清理过期数据
-        this.cleanupExpiredData();
-        this.cleanupExpiredTrafficData();
-      });
+      this.isRunning = true;
+      logger.info('MetricsCollector started');
     });
+  }
+
+  /**
+   * 迁移旧的指标数据到默认设备目录
+   */
+  private async migrateLegacyData(): Promise<void> {
+    try {
+      const devices = await deviceService.getAllDevices();
+      if (devices.length === 0) return;
+      const defaultDeviceId = devices[0].id;
+
+      const oldSystemDir = path.join(METRICS_BASE_DIR, 'system');
+      const oldInterfaceDir = path.join(METRICS_BASE_DIR, 'interfaces');
+      const oldTrafficDir = path.join(METRICS_BASE_DIR, 'traffic');
+
+      // 检查旧目录是否存在
+      try {
+        await fs.access(oldSystemDir);
+      } catch {
+        return; // 旧目录不存在，无需迁移
+      }
+
+      logger.info(`Migrating legacy metrics data to device ${defaultDeviceId}...`);
+      await this.ensureDeviceDirectories(defaultDeviceId);
+
+      // Helper to move files
+      const moveFiles = async (srcDir: string, destDir: string) => {
+        try {
+          const files = await fs.readdir(srcDir);
+          for (const file of files) {
+            const srcPath = path.join(srcDir, file);
+            const destPath = path.join(destDir, file);
+            try {
+              // Check if dest exists to avoid overwrite? Or overwrite?
+              // Overwrite is safer for "moving into place" semantics if we assume device ID logic is new.
+              await fs.rename(srcPath, destPath);
+            } catch (err) {
+              logger.warn(`Failed to move file ${file}:`, err);
+            }
+          }
+          // Remove empty source dir
+          await fs.rmdir(srcDir);
+        } catch (err) {
+          logger.warn(`Failed to migrate directory ${srcDir}:`, err);
+        }
+      };
+
+      await moveFiles(oldSystemDir, getDeviceMetricsDir(defaultDeviceId, 'system'));
+      await moveFiles(oldInterfaceDir, getDeviceMetricsDir(defaultDeviceId, 'interfaces'));
+      await moveFiles(oldTrafficDir, getDeviceMetricsDir(defaultDeviceId, 'traffic'));
+
+      logger.info('Legacy metrics data migration completed');
+    } catch (error) {
+      logger.error('Failed to migrate legacy metrics data:', error);
+    }
   }
 
   /**
@@ -465,54 +486,53 @@ export class MetricsCollector implements IMetricsCollector {
       clearInterval(this.trafficIntervalId);
       this.trafficIntervalId = null;
     }
-    // 保存字节快照
-    this.saveLastBytesSnapshot();
     this.isRunning = false;
     logger.info('MetricsCollector stopped');
   }
 
   /**
-   * 立即执行一次采集
+   * 立即执行一次采集 (指定设备)
    */
-  async collectNow(): Promise<{ system: SystemMetrics; interfaces: InterfaceMetrics[] }> {
-    await this.ensureDirectories();
+  async collectNow(deviceId?: string): Promise<{ system: SystemMetrics; interfaces: InterfaceMetrics[] } | null> {
+    // 如果没有指定设备，默认使用第一个
+    if (!deviceId) {
+      const devices = await deviceService.getAllDevices();
+      if (devices.length > 0) {
+        deviceId = devices[0].id;
+      } else {
+        throw new Error('No devices configured');
+      }
+    }
 
-    const system = await this.collectSystemMetrics();
-    const interfaces = await this.collectInterfaceMetrics();
-
-    // 更新最新指标缓存
-    this.latestMetrics = { system, interfaces };
-
-    // 持久化存储
-    await this.storeMetrics(system, interfaces);
-
-    return { system, interfaces };
+    await this.collectForDevice(deviceId);
+    return this.latestMetrics.get(deviceId) || null;
   }
 
   /**
    * 获取最新指标
+   * @param deviceId 设备ID (可选，若不传则返回第一个设备的指标)
    */
-  async getLatest(): Promise<{ system: SystemMetrics; interfaces: InterfaceMetrics[] } | null> {
-    // 如果有缓存，直接返回
-    if (this.latestMetrics) {
-      return this.latestMetrics;
+  async getLatest(deviceId?: string): Promise<{ system: SystemMetrics; interfaces: InterfaceMetrics[] } | null> {
+    if (!deviceId) {
+      const devices = await deviceService.getAllDevices();
+      if (devices.length === 0) return null;
+      deviceId = devices[0].id;
     }
 
-    // 否则从文件读取最新数据
+    if (this.latestMetrics.has(deviceId)) {
+      return this.latestMetrics.get(deviceId)!;
+    }
+
+    // 尝试从文件读取
     const today = getDateString(Date.now());
-    const systemData = await this.readSystemMetricsFile(today);
-    const interfaceData = await this.readInterfaceMetricsFile(today);
+    const systemData = await this.readSystemMetricsFile(deviceId, today);
+    const interfaceData = await this.readInterfaceMetricsFile(deviceId, today);
 
     if (systemData.length > 0 && interfaceData.length > 0) {
-      const latestSystem = systemData[systemData.length - 1];
-      const latestInterface = interfaceData[interfaceData.length - 1];
-
-      this.latestMetrics = {
-        system: latestSystem.metrics,
-        interfaces: latestInterface.interfaces,
+      return {
+        system: systemData[systemData.length - 1].metrics,
+        interfaces: interfaceData[interfaceData.length - 1].interfaces,
       };
-
-      return this.latestMetrics;
     }
 
     return null;
@@ -521,28 +541,26 @@ export class MetricsCollector implements IMetricsCollector {
 
   /**
    * 获取历史指标数据
-   * @param metric 指标类型: 'cpu', 'memory', 'disk', 'interface:{name}'
-   * @param from 开始时间戳
-   * @param to 结束时间戳
    */
-  async getHistory(metric: string, from: number, to: number): Promise<MetricPoint[]> {
-    await this.ensureDirectories();
+  async getHistory(metric: string, from: number, to: number, deviceId?: string): Promise<MetricPoint[]> {
+    if (!deviceId) {
+      const devices = await deviceService.getAllDevices();
+      if (devices.length === 0) return [];
+      deviceId = devices[0].id;
+    }
 
     const points: MetricPoint[] = [];
     const dates = this.getDateRange(from, to);
 
-    // 判断是系统指标还是接口指标
     if (metric.startsWith('interface:')) {
       const interfaceName = metric.substring('interface:'.length);
       
       for (const dateStr of dates) {
-        const data = await this.readInterfaceMetricsFile(dateStr);
-        
+        const data = await this.readInterfaceMetricsFile(deviceId, dateStr);
         for (const entry of data) {
           if (entry.timestamp >= from && entry.timestamp <= to) {
             const iface = entry.interfaces.find((i) => i.name === interfaceName);
             if (iface) {
-              // 返回接口流量作为值
               points.push({
                 timestamp: entry.timestamp,
                 value: iface.rxBytes + iface.txBytes,
@@ -558,61 +576,94 @@ export class MetricsCollector implements IMetricsCollector {
         }
       }
     } else {
-      // 系统指标
       for (const dateStr of dates) {
-        const data = await this.readSystemMetricsFile(dateStr);
-        
+        const data = await this.readSystemMetricsFile(deviceId, dateStr);
         for (const entry of data) {
           if (entry.timestamp >= from && entry.timestamp <= to) {
-            let value: number;
-            
+            let value: number = 0;
             switch (metric) {
-              case 'cpu':
-                value = entry.metrics.cpu.usage;
-                break;
-              case 'memory':
-                value = entry.metrics.memory.usage;
-                break;
-              case 'disk':
-                value = entry.metrics.disk.usage;
-                break;
-              default:
-                continue;
+              case 'cpu': value = entry.metrics.cpu.usage; break;
+              case 'memory': value = entry.metrics.memory.usage; break;
+              case 'disk': value = entry.metrics.disk.usage; break;
             }
-            
-            points.push({
-              timestamp: entry.timestamp,
-              value,
-            });
+            points.push({ timestamp: entry.timestamp, value });
           }
         }
       }
     }
 
-    // 按时间戳排序
     points.sort((a, b) => a.timestamp - b.timestamp);
-
     return points;
   }
 
   /**
-   * 获取日期范围内的所有日期字符串 (使用 UTC 时间)
+   * 获取指定日期范围内的系统指标
+   * @deprecated 兼容旧代码，默认使用第一个设备
+   */
+  async getSystemMetricsHistory(from: number, to: number, deviceId?: string): Promise<StoredSystemMetrics[]> {
+    if (!deviceId) {
+      const devices = await deviceService.getAllDevices();
+      if (devices.length === 0) return [];
+      deviceId = devices[0].id;
+    }
+
+    const results: StoredSystemMetrics[] = [];
+    const dates = this.getDateRange(from, to);
+
+    for (const dateStr of dates) {
+      const data = await this.readSystemMetricsFile(deviceId, dateStr);
+      for (const entry of data) {
+        if (entry.timestamp >= from && entry.timestamp <= to) {
+          results.push(entry);
+        }
+      }
+    }
+
+    results.sort((a, b) => a.timestamp - b.timestamp);
+    return results;
+  }
+
+  /**
+   * 获取指定日期范围内的接口指标
+   * @deprecated 兼容旧代码，默认使用第一个设备
+   */
+  async getInterfaceMetricsHistory(from: number, to: number, deviceId?: string): Promise<StoredInterfaceMetrics[]> {
+    if (!deviceId) {
+      const devices = await deviceService.getAllDevices();
+      if (devices.length === 0) return [];
+      deviceId = devices[0].id;
+    }
+
+    const results: StoredInterfaceMetrics[] = [];
+    const dates = this.getDateRange(from, to);
+
+    for (const dateStr of dates) {
+      const data = await this.readInterfaceMetricsFile(deviceId, dateStr);
+      for (const entry of data) {
+        if (entry.timestamp >= from && entry.timestamp <= to) {
+          results.push(entry);
+        }
+      }
+    }
+
+    results.sort((a, b) => a.timestamp - b.timestamp);
+    return results;
+  }
+
+  /**
+   * 获取日期范围内的所有日期字符串
    */
   private getDateRange(from: number, to: number): string[] {
     const dates: string[] = [];
-    
-    // 使用 UTC 时间计算日期范围
     const fromDate = new Date(from);
     const toDate = new Date(to);
     
-    // 获取 UTC 日期的开始
     const currentDate = new Date(Date.UTC(
       fromDate.getUTCFullYear(),
       fromDate.getUTCMonth(),
       fromDate.getUTCDate()
     ));
     
-    // 获取 UTC 日期的结束
     const endDate = new Date(Date.UTC(
       toDate.getUTCFullYear(),
       toDate.getUTCMonth(),
@@ -629,179 +680,81 @@ export class MetricsCollector implements IMetricsCollector {
   }
 
   /**
-   * 列出所有指标文件
-   */
-  private async listMetricsFiles(dir: string): Promise<string[]> {
-    try {
-      const files = await fs.readdir(dir);
-      return files
-        .filter((f) => f.endsWith('.json') && f !== '.gitkeep')
-        .map((f) => f.replace('.json', ''))
-        .sort();
-    } catch {
-      return [];
-    }
-  }
-
-  /**
    * 清理过期数据
    */
-  async cleanupExpiredData(): Promise<{ systemDeleted: number; interfaceDeleted: number }> {
-    await this.ensureDirectories();
-
+  async cleanupExpiredData(): Promise<void> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - this.config.retentionDays);
-    cutoffDate.setHours(0, 0, 0, 0);
     const cutoffDateStr = getDateString(cutoffDate.getTime());
 
-    let systemDeleted = 0;
-    let interfaceDeleted = 0;
+    // 遍历所有设备目录
+    try {
+      const deviceDirs = await fs.readdir(METRICS_BASE_DIR);
+      for (const deviceId of deviceDirs) {
+        const deviceDir = path.join(METRICS_BASE_DIR, deviceId);
 
-    // 清理系统指标
-    const systemFiles = await this.listMetricsFiles(SYSTEM_METRICS_DIR);
-    for (const dateStr of systemFiles) {
-      if (dateStr < cutoffDateStr) {
-        const filePath = getSystemMetricsFilePath(dateStr);
-        try {
-          const data = await this.readSystemMetricsFile(dateStr);
-          systemDeleted += data.length;
-          await fs.unlink(filePath);
-          logger.info(`Deleted expired system metrics file: ${dateStr}`);
-        } catch (error) {
-          logger.error(`Failed to delete system metrics file ${dateStr}:`, error);
-        }
+        // Cleanup System
+        await this.cleanupDir(path.join(deviceDir, 'system'), cutoffDateStr);
+        // Cleanup Interfaces
+        await this.cleanupDir(path.join(deviceDir, 'interfaces'), cutoffDateStr);
+        // Cleanup Traffic
+        await this.cleanupDir(path.join(deviceDir, 'traffic'), cutoffDateStr);
       }
+    } catch {
+      // ignore
     }
-
-    // 清理接口指标
-    const interfaceFiles = await this.listMetricsFiles(INTERFACE_METRICS_DIR);
-    for (const dateStr of interfaceFiles) {
-      if (dateStr < cutoffDateStr) {
-        const filePath = getInterfaceMetricsFilePath(dateStr);
-        try {
-          const data = await this.readInterfaceMetricsFile(dateStr);
-          interfaceDeleted += data.length;
-          await fs.unlink(filePath);
-          logger.info(`Deleted expired interface metrics file: ${dateStr}`);
-        } catch (error) {
-          logger.error(`Failed to delete interface metrics file ${dateStr}:`, error);
-        }
-      }
-    }
-
-    if (systemDeleted > 0 || interfaceDeleted > 0) {
-      logger.info(
-        `Metrics cleanup completed: ${systemDeleted} system records, ${interfaceDeleted} interface records deleted`
-      );
-    }
-
-    return { systemDeleted, interfaceDeleted };
   }
 
-  /**
-   * 获取指定日期范围内的系统指标
-   */
-  async getSystemMetricsHistory(from: number, to: number): Promise<StoredSystemMetrics[]> {
-    await this.ensureDirectories();
-
-    const results: StoredSystemMetrics[] = [];
-    const dates = this.getDateRange(from, to);
-
-    logger.info(`getSystemMetricsHistory: from=${new Date(from).toISOString()}, to=${new Date(to).toISOString()}`);
-    logger.info(`getSystemMetricsHistory: dates to query: ${dates.join(', ')}`);
-
-    for (const dateStr of dates) {
-      const data = await this.readSystemMetricsFile(dateStr);
-      logger.info(`getSystemMetricsHistory: read ${data.length} records from ${dateStr}`);
-      
-      let matchedCount = 0;
-      for (const entry of data) {
-        if (entry.timestamp >= from && entry.timestamp <= to) {
-          results.push(entry);
-          matchedCount++;
+  private async cleanupDir(dir: string, cutoffDateStr: string) {
+    try {
+      const files = await fs.readdir(dir);
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          const dateStr = file.replace('.json', '');
+          if (dateStr < cutoffDateStr && dateStr !== 'last-bytes') {
+            await fs.unlink(path.join(dir, file));
+          }
         }
       }
-      logger.info(`getSystemMetricsHistory: ${matchedCount} records matched time range from ${dateStr}`);
-      
-      if (data.length > 0 && matchedCount === 0) {
-        // 输出第一条和最后一条记录的时间戳，帮助调试
-        logger.info(`getSystemMetricsHistory: first record timestamp: ${data[0].timestamp} (${new Date(data[0].timestamp).toISOString()})`);
-        logger.info(`getSystemMetricsHistory: last record timestamp: ${data[data.length - 1].timestamp} (${new Date(data[data.length - 1].timestamp).toISOString()})`);
-      }
+    } catch {
+      // ignore
     }
-
-    results.sort((a, b) => a.timestamp - b.timestamp);
-    logger.info(`getSystemMetricsHistory: total ${results.length} records found`);
-    return results;
   }
-
-  /**
-   * 获取指定日期范围内的接口指标
-   */
-  async getInterfaceMetricsHistory(from: number, to: number): Promise<StoredInterfaceMetrics[]> {
-    await this.ensureDirectories();
-
-    const results: StoredInterfaceMetrics[] = [];
-    const dates = this.getDateRange(from, to);
-
-    for (const dateStr of dates) {
-      const data = await this.readInterfaceMetricsFile(dateStr);
-      for (const entry of data) {
-        if (entry.timestamp >= from && entry.timestamp <= to) {
-          results.push(entry);
-        }
-      }
-    }
-
-    results.sort((a, b) => a.timestamp - b.timestamp);
-    return results;
-  }
-
-  /**
-   * 检查服务是否正在运行
-   */
-  isServiceRunning(): boolean {
-    return this.isRunning;
-  }
-
-  // ==================== 流量速率采集 ====================
 
   /**
    * 启动流量速率采集
    */
   private startTrafficCollection(): void {
-    // 加载上次的字节快照
-    this.loadLastBytesSnapshot();
-
-    // 立即执行一次
-    this.collectTrafficRates();
-
-    // 设置定时采集
-    this.trafficIntervalId = setInterval(() => {
-      this.collectTrafficRates();
+    // 定时采集
+    this.trafficIntervalId = setInterval(async () => {
+      const devices = await deviceService.getAllDevices();
+      for (const device of devices) {
+        await this.collectTrafficRatesForDevice(device.id);
+      }
     }, TRAFFIC_COLLECTION_INTERVAL_MS);
-
-    logger.info('Traffic rate collection started');
   }
 
   /**
-   * 采集流量速率并持久化存储
+   * 采集单个设备的流量速率
    */
-  private async collectTrafficRates(): Promise<void> {
+  private async collectTrafficRatesForDevice(deviceId: string): Promise<void> {
     try {
-      if (!routerosClient.isConnected()) {
-        return;
-      }
+      const client = await connectionPool.getClient(deviceId);
+      if (!client.isConnected()) return;
 
-      const interfaces = await routerosClient.print<{
+      const interfaces = await client.print<{
         name: string;
         'rx-byte': string;
         'tx-byte': string;
       }>('/interface');
 
-      if (!interfaces || interfaces.length === 0) {
-        return;
+      if (!interfaces || interfaces.length === 0) return;
+
+      // 初始化设备的历史记录 Map
+      if (!this.trafficHistory.has(deviceId)) {
+        this.trafficHistory.set(deviceId, new Map());
       }
+      const deviceHistory = this.trafficHistory.get(deviceId)!;
 
       const now = Date.now();
       const dateStr = getDateString(now);
@@ -812,25 +765,20 @@ export class MetricsCollector implements IMetricsCollector {
         const rxBytes = parseInt(iface['rx-byte'] || '0', 10);
         const txBytes = parseInt(iface['tx-byte'] || '0', 10);
 
-        let history = this.trafficHistory.get(name);
+        let history = deviceHistory.get(name);
         if (!history) {
-          history = {
-            name,
-            points: [],
-            lastBytes: null,
-          };
-          this.trafficHistory.set(name, history);
+          history = { name, points: [], lastBytes: null };
+          deviceHistory.set(name, history);
         }
 
         // 计算速率
         if (history.lastBytes) {
-          const timeDiff = (now - history.lastBytes.timestamp) / 1000; // seconds
+          const timeDiff = (now - history.lastBytes.timestamp) / 1000;
           
-          if (timeDiff > 0 && timeDiff < 120) { // 合理的时间差范围
+          if (timeDiff > 0 && timeDiff < 120) {
             const rxDiff = rxBytes - history.lastBytes.rx;
             const txDiff = txBytes - history.lastBytes.tx;
 
-            // 处理计数器重置（字节数变小）
             let rxRate = 0;
             let txRate = 0;
 
@@ -838,177 +786,91 @@ export class MetricsCollector implements IMetricsCollector {
               rxRate = rxDiff / timeDiff;
               txRate = txDiff / timeDiff;
             } else {
-              // 计数器重置，使用上一个有效值
-              const lastPoint = history.points.length > 0 
-                ? history.points[history.points.length - 1] 
-                : null;
+              // 计数器重置
+              const lastPoint = history.points.length > 0 ? history.points[history.points.length - 1] : null;
               if (lastPoint) {
                 rxRate = lastPoint.rxRate;
                 txRate = lastPoint.txRate;
               }
             }
 
-            // 添加到内存缓存（保留 1 小时）
-            history.points.push({
-              timestamp: now,
-              rxRate,
-              txRate,
-            });
+            history.points.push({ timestamp: now, rxRate, txRate });
 
-            // 内存中只保留 1 小时数据
+            // 内存中保留 1 小时
             const oneHourAgo = now - 3600000;
             history.points = history.points.filter(p => p.timestamp >= oneHourAgo);
 
-            // 收集用于持久化的数据
             trafficPoints.push({ name, rxRate, txRate });
           }
         }
 
-        // 更新最后的字节数
-        history.lastBytes = {
-          rx: rxBytes,
-          tx: txBytes,
-          timestamp: now,
-        };
+        history.lastBytes = { rx: rxBytes, tx: txBytes, timestamp: now };
       }
 
-      // 持久化存储流量数据
+      // 持久化
       if (trafficPoints.length > 0) {
-        await this.appendTrafficData(dateStr, now, trafficPoints);
+        await this.appendTrafficData(deviceId, dateStr, now, trafficPoints);
       }
-
-      // 保存字节快照（用于重启恢复）
-      await this.saveLastBytesSnapshot();
-
-      // 清理不再存在的接口
-      this.cleanupStaleInterfaces(interfaces.map(i => i.name));
 
     } catch (error) {
-      logger.debug('Traffic rate collection error:', error);
+      // ignore
     }
   }
 
-  /**
-   * 追加流量数据到日期文件
-   */
   private async appendTrafficData(
+    deviceId: string,
     dateStr: string,
     timestamp: number,
     points: { name: string; rxRate: number; txRate: number }[]
   ): Promise<void> {
-    const filePath = path.join(TRAFFIC_METRICS_DIR, `${dateStr}.json`);
+    const dir = getDeviceMetricsDir(deviceId, 'traffic');
+    await fs.mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, `${dateStr}.json`);
     
     try {
-      let data: Array<{ timestamp: number; interfaces: { name: string; rxRate: number; txRate: number }[] }> = [];
-      
+      let data: any[] = [];
       try {
         const content = await fs.readFile(filePath, 'utf-8');
         data = JSON.parse(content);
-      } catch {
-        // 文件不存在，使用空数组
-      }
+      } catch { }
 
-      data.push({
-        timestamp,
-        interfaces: points,
-      });
-
+      data.push({ timestamp, interfaces: points });
       await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
-    } catch (error) {
-      logger.error('Failed to append traffic data:', error);
-    }
+    } catch { }
   }
 
   /**
-   * 保存字节快照（用于重启后恢复速率计算）
+   * 获取接口流量历史 (内存)
    */
-  private async saveLastBytesSnapshot(): Promise<void> {
-    try {
-      const snapshot: Record<string, { rx: number; tx: number; timestamp: number }> = {};
-      
-      for (const [name, history] of this.trafficHistory) {
-        if (history.lastBytes) {
-          snapshot[name] = history.lastBytes;
-        }
-      }
+  getTrafficHistory(interfaceName: string, duration: number = 3600000, deviceId?: string): TrafficRatePoint[] {
+    // TODO: 如果没传 deviceId，目前只能返回空，或者遍历所有？
+    // 为了兼容性，如果没有 deviceId，我们尝试获取第一个有数据的设备？
+    // 暂定：必须传 deviceId，或者我们在外部 controller 处理了默认值
+    if (!deviceId) return [];
 
-      const filePath = path.join(TRAFFIC_METRICS_DIR, 'last-bytes.json');
-      await fs.writeFile(filePath, JSON.stringify(snapshot), 'utf-8');
-    } catch (error) {
-      logger.error('Failed to save bytes snapshot:', error);
-    }
-  }
+    const deviceHistory = this.trafficHistory.get(deviceId);
+    if (!deviceHistory) return [];
 
-  /**
-   * 加载字节快照
-   */
-  private async loadLastBytesSnapshot(): Promise<void> {
-    try {
-      const filePath = path.join(TRAFFIC_METRICS_DIR, 'last-bytes.json');
-      const content = await fs.readFile(filePath, 'utf-8');
-      const snapshot = JSON.parse(content) as Record<string, { rx: number; tx: number; timestamp: number }>;
-
-      const now = Date.now();
-      
-      for (const [name, bytes] of Object.entries(snapshot)) {
-        // 只加载 2 分钟内的快照（避免计算出错误的速率）
-        if (now - bytes.timestamp < 120000) {
-          this.trafficHistory.set(name, {
-            name,
-            points: [],
-            lastBytes: bytes,
-          });
-        }
-      }
-
-      logger.info(`Loaded bytes snapshot for ${this.trafficHistory.size} interfaces`);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.error('Failed to load bytes snapshot:', error);
-      }
-    }
-  }
-
-  /**
-   * 清理不再存在的接口数据
-   */
-  private cleanupStaleInterfaces(currentInterfaces: string[]): void {
-    const currentSet = new Set(currentInterfaces);
-    
-    // 如果接口数量超过限制，删除不在当前列表中的接口
-    if (this.trafficHistory.size > TRAFFIC_MAX_INTERFACES) {
-      for (const [name] of this.trafficHistory) {
-        if (!currentSet.has(name)) {
-          this.trafficHistory.delete(name);
-        }
-      }
-    }
-  }
-
-  /**
-   * 获取接口流量历史（从内存获取最近 1 小时）
-   * @param interfaceName 接口名称
-   * @param duration 时间范围（毫秒），默认 1 小时
-   */
-  getTrafficHistory(interfaceName: string, duration: number = 3600000): TrafficRatePoint[] {
-    const history = this.trafficHistory.get(interfaceName);
-    if (!history) {
-      return [];
-    }
+    const history = deviceHistory.get(interfaceName);
+    if (!history) return [];
 
     const cutoff = Date.now() - duration;
     return history.points.filter(p => p.timestamp >= cutoff);
   }
 
   /**
-   * 获取所有接口的流量历史（从内存获取最近 1 小时）
-   * @param duration 时间范围（毫秒），默认 1 小时
+   * 获取所有接口流量历史
    */
-  getAllTrafficHistory(duration: number = 3600000): Record<string, TrafficRatePoint[]> {
+  getAllTrafficHistory(duration: number = 3600000, deviceId?: string): Record<string, TrafficRatePoint[]> {
+    if (!deviceId) return {}; // 必须指定设备
+
     const result: Record<string, TrafficRatePoint[]> = {};
+    const deviceHistory = this.trafficHistory.get(deviceId);
+    if (!deviceHistory) return {};
+
     const cutoff = Date.now() - duration;
 
-    for (const [name, history] of this.trafficHistory) {
+    for (const [name, history] of deviceHistory) {
       const filtered = history.points.filter(p => p.timestamp >= cutoff);
       if (filtered.length > 0) {
         result[name] = filtered;
@@ -1019,106 +881,18 @@ export class MetricsCollector implements IMetricsCollector {
   }
 
   /**
-   * 获取历史流量数据（从文件读取，支持 7 天）
-   * @param interfaceName 接口名称
-   * @param from 开始时间戳
-   * @param to 结束时间戳
+   * 获取可用接口列表
    */
-  async getTrafficHistoryFromFile(
-    interfaceName: string,
-    from: number,
-    to: number
-  ): Promise<TrafficRatePoint[]> {
-    const dates = this.getDateRange(from, to);
-    const result: TrafficRatePoint[] = [];
-
-    for (const dateStr of dates) {
-      const filePath = path.join(TRAFFIC_METRICS_DIR, `${dateStr}.json`);
-      
-      try {
-        const content = await fs.readFile(filePath, 'utf-8');
-        const data = JSON.parse(content) as Array<{
-          timestamp: number;
-          interfaces: { name: string; rxRate: number; txRate: number }[];
-        }>;
-
-        for (const entry of data) {
-          if (entry.timestamp >= from && entry.timestamp <= to) {
-            const iface = entry.interfaces.find(i => i.name === interfaceName);
-            if (iface) {
-              result.push({
-                timestamp: entry.timestamp,
-                rxRate: iface.rxRate,
-                txRate: iface.txRate,
-              });
-            }
-          }
-        }
-      } catch {
-        // 文件不存在，跳过
-      }
-    }
-
-    return result.sort((a, b) => a.timestamp - b.timestamp);
+  getAvailableTrafficInterfaces(deviceId?: string): string[] {
+    if (!deviceId) return [];
+    const deviceHistory = this.trafficHistory.get(deviceId);
+    if (!deviceHistory) return [];
+    return Array.from(deviceHistory.keys());
   }
 
-  /**
-   * 获取可用的接口列表（有流量数据的）
-   */
-  getAvailableTrafficInterfaces(): string[] {
-    return Array.from(this.trafficHistory.keys()).filter(
-      name => this.trafficHistory.get(name)!.points.length > 0
-    );
-  }
-
-  /**
-   * 清理过期的流量数据文件
-   */
-  async cleanupExpiredTrafficData(): Promise<number> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - this.config.retentionDays);
-    const cutoffDateStr = getDateString(cutoffDate.getTime());
-
-    let deletedCount = 0;
-
-    try {
-      const files = await fs.readdir(TRAFFIC_METRICS_DIR);
-      
-      for (const file of files) {
-        if (file.endsWith('.json') && file !== 'last-bytes.json') {
-          const dateStr = file.replace('.json', '');
-          if (dateStr < cutoffDateStr) {
-            await fs.unlink(path.join(TRAFFIC_METRICS_DIR, file));
-            deletedCount++;
-            logger.info(`Deleted expired traffic data file: ${file}`);
-          }
-        }
-      }
-    } catch (error) {
-      logger.error('Failed to cleanup expired traffic data:', error);
-    }
-
-    return deletedCount;
-  }
-
-  /**
-   * 注册告警评估回调
-   * 每次采集完指标后会调用此回调进行告警评估
-   * @param callback 告警评估回调函数
-   */
   registerAlertEvaluationCallback(callback: AlertEvaluationCallback): void {
     this.alertEvaluationCallback = callback;
-    logger.info('Alert evaluation callback registered');
-  }
-
-  /**
-   * 取消注册告警评估回调
-   */
-  unregisterAlertEvaluationCallback(): void {
-    this.alertEvaluationCallback = null;
-    logger.info('Alert evaluation callback unregistered');
   }
 }
 
-// 导出单例实例
 export const metricsCollector = new MetricsCollector();

@@ -4,7 +4,8 @@
  */
 
 import { Request, Response } from 'express';
-import { routerosClient } from '../services/routerosClient';
+import { connectionPool } from '../services/connectionPool';
+import { deviceService } from '../services/deviceService';
 import { IPv6Address, DHCPv6Client, ND, IPv6Neighbor, IPv6Route } from '../types';
 import { logger } from '../utils/logger';
 
@@ -15,15 +16,22 @@ const IPV6_ND_PATH = '/ipv6/nd';
 const IPV6_NEIGHBOR_PATH = '/ipv6/neighbor';
 const IPV6_ROUTE_PATH = '/ipv6/route';
 
+async function getClient(req: Request) {
+  const deviceId = (req.query.deviceId as string) || (await deviceService.getAllDevices())[0]?.id;
+  if (!deviceId) throw new Error('Device ID is required');
+  return await connectionPool.getClient(deviceId);
+}
+
 // ==================== IPv6 Address 相关 ====================
 
 /**
  * 获取所有 IPv6 地址
  * GET /api/ipv6/addresses
  */
-export async function getAllIPv6Addresses(_req: Request, res: Response): Promise<void> {
+export async function getAllIPv6Addresses(req: Request, res: Response): Promise<void> {
   try {
-    const addresses = await routerosClient.print<IPv6Address>(IPV6_ADDRESS_PATH);
+    const client = await getClient(req);
+    const addresses = await client.print<IPv6Address>(IPV6_ADDRESS_PATH);
     res.json({ success: true, data: addresses });
   } catch (error) {
     logger.error('Failed to get IPv6 addresses:', error);
@@ -46,7 +54,8 @@ export async function getIPv6AddressById(req: Request, res: Response): Promise<v
       return;
     }
 
-    const address = await routerosClient.getById<IPv6Address>(IPV6_ADDRESS_PATH, id);
+    const client = await getClient(req);
+    const address = await client.getById<IPv6Address>(IPV6_ADDRESS_PATH, id);
     if (!address) {
       res.status(404).json({ success: false, error: 'IPv6 地址不存在' });
       return;
@@ -86,7 +95,8 @@ export async function addIPv6Address(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const newAddress = await routerosClient.add<IPv6Address>(IPV6_ADDRESS_PATH, addressData);
+    const client = await getClient(req);
+    const newAddress = await client.add<IPv6Address>(IPV6_ADDRESS_PATH, addressData);
     res.status(201).json({ success: true, data: newAddress, message: 'IPv6 地址已添加' });
   } catch (error) {
     logger.error('Failed to add IPv6 address:', error);
@@ -128,7 +138,8 @@ export async function updateIPv6Address(req: Request, res: Response): Promise<vo
       }
     }
 
-    const updatedAddress = await routerosClient.set<IPv6Address>(IPV6_ADDRESS_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedAddress = await client.set<IPv6Address>(IPV6_ADDRESS_PATH, id, updateData);
     res.json({ success: true, data: updatedAddress, message: 'IPv6 地址已更新' });
   } catch (error) {
     logger.error('Failed to update IPv6 address:', error);
@@ -151,7 +162,8 @@ export async function deleteIPv6Address(req: Request, res: Response): Promise<vo
       return;
     }
 
-    await routerosClient.remove(IPV6_ADDRESS_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IPV6_ADDRESS_PATH, id);
     res.json({ success: true, message: 'IPv6 地址已删除' });
   } catch (error) {
     logger.error('Failed to delete IPv6 address:', error);
@@ -169,9 +181,10 @@ export async function deleteIPv6Address(req: Request, res: Response): Promise<vo
  * 获取所有 DHCPv6 客户端
  * GET /api/ipv6/dhcp-client
  */
-export async function getAllDHCPv6Clients(_req: Request, res: Response): Promise<void> {
+export async function getAllDHCPv6Clients(req: Request, res: Response): Promise<void> {
   try {
-    const clients = await routerosClient.print<DHCPv6Client>(IPV6_DHCP_CLIENT_PATH);
+    const client = await getClient(req);
+    const clients = await client.print<DHCPv6Client>(IPV6_DHCP_CLIENT_PATH);
     res.json({ success: true, data: clients });
   } catch (error) {
     logger.error('Failed to get DHCPv6 clients:', error);
@@ -194,13 +207,14 @@ export async function getDHCPv6ClientById(req: Request, res: Response): Promise<
       return;
     }
 
-    const client = await routerosClient.getById<DHCPv6Client>(IPV6_DHCP_CLIENT_PATH, id);
-    if (!client) {
+    const client = await getClient(req);
+    const clientData = await client.getById<DHCPv6Client>(IPV6_DHCP_CLIENT_PATH, id);
+    if (!clientData) {
       res.status(404).json({ success: false, error: 'DHCPv6 客户端不存在' });
       return;
     }
 
-    res.json({ success: true, data: client });
+    res.json({ success: true, data: clientData });
   } catch (error) {
     logger.error('Failed to get DHCPv6 client:', error);
     res.status(500).json({
@@ -223,7 +237,8 @@ export async function addDHCPv6Client(req: Request, res: Response): Promise<void
       return;
     }
 
-    const newClient = await routerosClient.add<DHCPv6Client>(IPV6_DHCP_CLIENT_PATH, clientData);
+    const client = await getClient(req);
+    const newClient = await client.add<DHCPv6Client>(IPV6_DHCP_CLIENT_PATH, clientData);
     res.status(201).json({ success: true, data: newClient, message: 'DHCPv6 客户端已添加' });
   } catch (error) {
     logger.error('Failed to add DHCPv6 client:', error);
@@ -253,7 +268,8 @@ export async function updateDHCPv6Client(req: Request, res: Response): Promise<v
       return;
     }
 
-    const updatedClient = await routerosClient.set<DHCPv6Client>(IPV6_DHCP_CLIENT_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedClient = await client.set<DHCPv6Client>(IPV6_DHCP_CLIENT_PATH, id, updateData);
     res.json({ success: true, data: updatedClient, message: 'DHCPv6 客户端已更新' });
   } catch (error) {
     logger.error('Failed to update DHCPv6 client:', error);
@@ -276,7 +292,8 @@ export async function deleteDHCPv6Client(req: Request, res: Response): Promise<v
       return;
     }
 
-    await routerosClient.remove(IPV6_DHCP_CLIENT_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IPV6_DHCP_CLIENT_PATH, id);
     res.json({ success: true, message: 'DHCPv6 客户端已删除' });
   } catch (error) {
     logger.error('Failed to delete DHCPv6 client:', error);
@@ -299,7 +316,8 @@ export async function releaseDHCPv6Client(req: Request, res: Response): Promise<
       return;
     }
 
-    await routerosClient.execute(`${IPV6_DHCP_CLIENT_PATH}/release`, [`=.id=${id}`]);
+    const client = await getClient(req);
+    await client.execute(`${IPV6_DHCP_CLIENT_PATH}/release`, [`=.id=${id}`]);
     res.json({ success: true, message: 'DHCPv6 客户端租约已释放' });
   } catch (error) {
     logger.error('Failed to release DHCPv6 client:', error);
@@ -322,7 +340,8 @@ export async function renewDHCPv6Client(req: Request, res: Response): Promise<vo
       return;
     }
 
-    await routerosClient.execute(`${IPV6_DHCP_CLIENT_PATH}/renew`, [`=.id=${id}`]);
+    const client = await getClient(req);
+    await client.execute(`${IPV6_DHCP_CLIENT_PATH}/renew`, [`=.id=${id}`]);
     res.json({ success: true, message: 'DHCPv6 客户端租约已续约' });
   } catch (error) {
     logger.error('Failed to renew DHCPv6 client:', error);
@@ -340,9 +359,10 @@ export async function renewDHCPv6Client(req: Request, res: Response): Promise<vo
  * 获取所有 ND 配置
  * GET /api/ipv6/nd
  */
-export async function getAllND(_req: Request, res: Response): Promise<void> {
+export async function getAllND(req: Request, res: Response): Promise<void> {
   try {
-    const ndList = await routerosClient.print<ND>(IPV6_ND_PATH);
+    const client = await getClient(req);
+    const ndList = await client.print<ND>(IPV6_ND_PATH);
     res.json({ success: true, data: ndList });
   } catch (error) {
     logger.error('Failed to get ND configurations:', error);
@@ -365,7 +385,8 @@ export async function getNDById(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const nd = await routerosClient.getById<ND>(IPV6_ND_PATH, id);
+    const client = await getClient(req);
+    const nd = await client.getById<ND>(IPV6_ND_PATH, id);
     if (!nd) {
       res.status(404).json({ success: false, error: 'ND 配置不存在' });
       return;
@@ -394,7 +415,8 @@ export async function addND(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const newND = await routerosClient.add<ND>(IPV6_ND_PATH, ndData);
+    const client = await getClient(req);
+    const newND = await client.add<ND>(IPV6_ND_PATH, ndData);
     res.status(201).json({ success: true, data: newND, message: 'ND 配置已添加' });
   } catch (error) {
     logger.error('Failed to add ND configuration:', error);
@@ -424,7 +446,8 @@ export async function updateND(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const updatedND = await routerosClient.set<ND>(IPV6_ND_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedND = await client.set<ND>(IPV6_ND_PATH, id, updateData);
     res.json({ success: true, data: updatedND, message: 'ND 配置已更新' });
   } catch (error) {
     logger.error('Failed to update ND configuration:', error);
@@ -447,7 +470,8 @@ export async function deleteND(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await routerosClient.remove(IPV6_ND_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IPV6_ND_PATH, id);
     res.json({ success: true, message: 'ND 配置已删除' });
   } catch (error) {
     logger.error('Failed to delete ND configuration:', error);
@@ -464,9 +488,10 @@ export async function deleteND(req: Request, res: Response): Promise<void> {
  * 获取所有 IPv6 邻居
  * GET /api/ipv6/neighbors
  */
-export async function getAllNeighbors(_req: Request, res: Response): Promise<void> {
+export async function getAllNeighbors(req: Request, res: Response): Promise<void> {
   try {
-    const neighbors = await routerosClient.print<IPv6Neighbor>(IPV6_NEIGHBOR_PATH);
+    const client = await getClient(req);
+    const neighbors = await client.print<IPv6Neighbor>(IPV6_NEIGHBOR_PATH);
     res.json({ success: true, data: neighbors });
   } catch (error) {
     logger.error('Failed to get IPv6 neighbors:', error);
@@ -484,9 +509,10 @@ export async function getAllNeighbors(_req: Request, res: Response): Promise<voi
  * 获取所有 IPv6 路由
  * GET /api/ipv6/routes
  */
-export async function getAllIPv6Routes(_req: Request, res: Response): Promise<void> {
+export async function getAllIPv6Routes(req: Request, res: Response): Promise<void> {
   try {
-    const routes = await routerosClient.print<IPv6Route>(IPV6_ROUTE_PATH);
+    const client = await getClient(req);
+    const routes = await client.print<IPv6Route>(IPV6_ROUTE_PATH);
     res.json({ success: true, data: routes });
   } catch (error) {
     logger.error('Failed to get IPv6 routes:', error);
@@ -509,7 +535,8 @@ export async function getIPv6RouteById(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const route = await routerosClient.getById<IPv6Route>(IPV6_ROUTE_PATH, id);
+    const client = await getClient(req);
+    const route = await client.getById<IPv6Route>(IPV6_ROUTE_PATH, id);
     if (!route) {
       res.status(404).json({ success: false, error: 'IPv6 路由不存在' });
       return;
@@ -548,7 +575,8 @@ export async function addIPv6Route(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const newRoute = await routerosClient.add<IPv6Route>(IPV6_ROUTE_PATH, routeData);
+    const client = await getClient(req);
+    const newRoute = await client.add<IPv6Route>(IPV6_ROUTE_PATH, routeData);
     res.status(201).json({ success: true, data: newRoute, message: 'IPv6 路由已添加' });
   } catch (error) {
     logger.error('Failed to add IPv6 route:', error);
@@ -590,7 +618,8 @@ export async function updateIPv6Route(req: Request, res: Response): Promise<void
       }
     }
 
-    const updatedRoute = await routerosClient.set<IPv6Route>(IPV6_ROUTE_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedRoute = await client.set<IPv6Route>(IPV6_ROUTE_PATH, id, updateData);
     res.json({ success: true, data: updatedRoute, message: 'IPv6 路由已更新' });
   } catch (error) {
     logger.error('Failed to update IPv6 route:', error);
@@ -613,7 +642,8 @@ export async function deleteIPv6Route(req: Request, res: Response): Promise<void
       return;
     }
 
-    await routerosClient.remove(IPV6_ROUTE_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IPV6_ROUTE_PATH, id);
     res.json({ success: true, message: 'IPv6 路由已删除' });
   } catch (error) {
     logger.error('Failed to delete IPv6 route:', error);

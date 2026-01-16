@@ -34,7 +34,8 @@ import {
   RiskLevel,
 } from '../../types/ai-ops';
 import { logger } from '../../utils/logger';
-import { routerosClient } from '../routerosClient';
+import { connectionPool } from '../connectionPool';
+import { deviceService } from '../deviceService';
 import { auditLogger } from './auditLogger';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'ai-ops');
@@ -217,14 +218,15 @@ export class ConfigSnapshotService implements IConfigSnapshotService {
   /**
    * 从 RouterOS 导出配置
    */
-  private async exportConfig(): Promise<string> {
-    if (!routerosClient.isConnected()) {
+  private async exportConfig(deviceId: string): Promise<string> {
+    const client = await connectionPool.getClient(deviceId);
+    if (!client.isConnected()) {
       throw new Error('RouterOS not connected');
     }
 
     try {
       // 使用 /export 命令导出配置
-      const response = await routerosClient.executeRaw('/export');
+      const response = await client.executeRaw('/export');
       
       if (Array.isArray(response) && response.length > 0) {
         // 响应可能是数组形式
@@ -245,17 +247,17 @@ export class ConfigSnapshotService implements IConfigSnapshotService {
       }
 
       // 尝试使用备用方法：逐个导出各个配置部分
-      return await this.exportConfigByParts();
+      return await this.exportConfigByParts(client);
     } catch (error) {
       logger.warn('Failed to export config using /export, trying alternative method:', error);
-      return await this.exportConfigByParts();
+      return await this.exportConfigByParts(client);
     }
   }
 
   /**
    * 分部分导出配置（备用方法）
    */
-  private async exportConfigByParts(): Promise<string> {
+  private async exportConfigByParts(client: any): Promise<string> {
     const parts: string[] = [];
     const configPaths = [
       '/system/identity',
@@ -276,10 +278,11 @@ export class ConfigSnapshotService implements IConfigSnapshotService {
 
     for (const configPath of configPaths) {
       try {
-        const response = await routerosClient.print<Record<string, unknown>>(configPath);
+        const response = await client.print(configPath);
         if (response && response.length > 0) {
           parts.push(`# ${configPath}`);
-          for (const item of response) {
+          const items = response as any[];
+          for (const item of items) {
             const line = Object.entries(item)
               .filter(([key]) => !key.startsWith('.'))
               .map(([key, value]) => `${key}=${value}`)
@@ -304,14 +307,15 @@ export class ConfigSnapshotService implements IConfigSnapshotService {
   /**
    * 获取路由器元数据
    */
-  private async getRouterMetadata(): Promise<{ routerVersion?: string; routerModel?: string }> {
+  private async getRouterMetadata(deviceId: string): Promise<{ routerVersion?: string; routerModel?: string }> {
     try {
-      const resources = await routerosClient.print<Record<string, string>>('/system/resource');
+      const client = await connectionPool.getClient(deviceId);
+      const resources = await client.print<{ version: string, 'board-name'?: string, platform?: string }>('/system/resource');
       if (resources && resources.length > 0) {
         const resource = resources[0];
         return {
           routerVersion: resource.version,
-          routerModel: resource['board-name'] || resource['platform'],
+          routerModel: resource['board-name'] || resource.platform,
         };
       }
     } catch (error) {
@@ -352,9 +356,14 @@ export class ConfigSnapshotService implements IConfigSnapshotService {
   async createSnapshot(trigger: SnapshotTrigger): Promise<ConfigSnapshot> {
     await this.initialize();
 
+    // TODO: Support selecting device for snapshot. Default to first.
+    const devices = await deviceService.getAllDevices();
+    if (devices.length === 0) throw new Error('No devices configured');
+    const deviceId = devices[0].id;
+
     // 导出配置
-    const content = await this.exportConfig();
-    const metadata = await this.getRouterMetadata();
+    const content = await this.exportConfig(deviceId);
+    const metadata = await this.getRouterMetadata(deviceId);
 
     // 创建快照记录
     const snapshot: ConfigSnapshot = {
@@ -509,7 +518,13 @@ export class ConfigSnapshotService implements IConfigSnapshotService {
       return { success: false, message: `Snapshot not found: ${id}` };
     }
 
-    if (!routerosClient.isConnected()) {
+    // TODO: Support selecting device. Default to first.
+    const devices = await deviceService.getAllDevices();
+    if (devices.length === 0) return { success: false, message: 'No devices configured' };
+    const deviceId = devices[0].id;
+    const client = await connectionPool.getClient(deviceId);
+
+    if (!client.isConnected()) {
       return { success: false, message: 'RouterOS not connected' };
     }
 
@@ -556,7 +571,7 @@ export class ConfigSnapshotService implements IConfigSnapshotService {
           // 转换为 API 格式并执行
           const { apiCommand, params } = this.convertToApiFormat(line);
           if (apiCommand) {
-            await routerosClient.executeRaw(apiCommand, params);
+            await client.executeRaw(apiCommand, params);
             successCount++;
           }
         } catch (error) {

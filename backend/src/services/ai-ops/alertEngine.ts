@@ -41,7 +41,7 @@ import {
 import { logger } from '../../utils/logger';
 import { auditLogger } from './auditLogger';
 import { notificationService } from './notificationService';
-import { routerosClient } from '../routerosClient';
+import { connectionPool } from '../connectionPool';
 import { metricsCollector } from './metricsCollector';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'ai-ops');
@@ -418,7 +418,8 @@ export class AlertEngine implements IAlertEngine {
   private getMetricValue(
     metrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] },
     metricType: MetricType,
-    metricLabel?: string
+    metricLabel?: string,
+    deviceId?: string
   ): number | null {
     switch (metricType) {
       case 'cpu':
@@ -440,15 +441,15 @@ export class AlertEngine implements IAlertEngine {
           return null;
         }
         // 获取最近的流量速率数据（最近 30 秒的平均值）
-        const trafficHistory = metricsCollector.getTrafficHistory(metricLabel, 30000);
+        const trafficHistory = metricsCollector.getTrafficHistory(metricLabel, 30000, deviceId);
         if (trafficHistory.length === 0) {
           // 如果没有速率数据，尝试获取更长时间范围的数据
-          const extendedHistory = metricsCollector.getTrafficHistory(metricLabel, 120000); // 2分钟
+          const extendedHistory = metricsCollector.getTrafficHistory(metricLabel, 120000, deviceId); // 2分钟
           if (extendedHistory.length === 0) {
             // 检查接口是否存在于可用列表中
-            const availableInterfaces = metricsCollector.getAvailableTrafficInterfaces();
+            const availableInterfaces = metricsCollector.getAvailableTrafficInterfaces(deviceId);
             if (!availableInterfaces.includes(metricLabel)) {
-              logger.warn(`[interface_traffic] Interface "${metricLabel}" not found in available interfaces: [${availableInterfaces.join(', ')}]`);
+              // logger.warn(`[interface_traffic] Interface "${metricLabel}" not found in available interfaces: [${availableInterfaces.join(', ')}]`);
             } else {
               logger.debug(`[interface_traffic] No traffic rate data yet for interface ${metricLabel}, waiting for data collection`);
             }
@@ -484,18 +485,11 @@ export class AlertEngine implements IAlertEngine {
   /**
    * 评估接口状态条件
    * 当接口当前状态等于目标状态时返回 true（触发告警）
-   * 
-   * 逻辑说明：
-   * - targetStatus: 'down' 表示"当接口断开时触发告警"
-   * - targetStatus: 'up' 表示"当接口连接时触发告警"（较少使用）
-   * - 所以当 currentStatus === targetStatus 时应该触发告警
    */
   private evaluateInterfaceStatus(
     currentStatus: InterfaceStatusTarget,
     targetStatus: InterfaceStatusTarget
   ): boolean {
-    // 当前状态等于目标状态时触发告警
-    // 例如：targetStatus='down' 且 currentStatus='down' 时触发
     return currentStatus === targetStatus;
   }
 
@@ -541,7 +535,8 @@ export class AlertEngine implements IAlertEngine {
    * 评估所有告警规则
    */
   async evaluate(
-    metrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] }
+    metrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] },
+    deviceId?: string
   ): Promise<AlertEvent[]> {
     await this.initialize();
 
@@ -549,10 +544,10 @@ export class AlertEngine implements IAlertEngine {
     const now = Date.now();
 
     // 添加调试日志：显示当前评估的规则数量
-    logger.info(`Alert evaluation started: ${this.rules.length} rules to evaluate`);
+    // logger.info(`Alert evaluation started for device ${deviceId || 'unknown'}: ${this.rules.length} rules`);
 
     // 检查告警恢复
-    await this.checkAlertRecovery(metrics);
+    await this.checkAlertRecovery(metrics, deviceId);
 
     // 评估每个启用的规则
     for (const rule of this.rules) {
@@ -569,61 +564,47 @@ export class AlertEngine implements IAlertEngine {
 
       // 根据指标类型选择不同的评估逻辑
       if (rule.metric === 'interface_status') {
-        // 接口状态类型：使用状态匹配而非数值比较
         const currentStatus = this.getInterfaceStatus(metrics, rule.metricLabel);
         if (currentStatus === null) {
-          logger.warn(`[interface_status] Rule ${rule.name}: Could not get interface status for ${rule.metricLabel}`);
+          // logger.warn(`[interface_status] Rule ${rule.name}: Could not get interface status for ${rule.metricLabel}`);
           continue;
         }
         
-        // 如果没有配置 targetStatus，默认为 'down'（即当接口 down 时触发告警）
         const targetStatus = rule.targetStatus || 'down';
         conditionMet = this.evaluateInterfaceStatus(currentStatus, targetStatus);
-        // 用于告警事件记录：1 表示 up，0 表示 down
         currentValue = currentStatus === 'up' ? 1 : 0;
         
-        // 添加详细日志
-        logger.info(`[interface_status] Rule ${rule.name}: interface=${rule.metricLabel}, currentStatus=${currentStatus}, targetStatus=${targetStatus}, conditionMet=${conditionMet}`);
       } else if (rule.metric === 'interface_traffic') {
-        // 接口流量类型：添加详细日志
-        const value = this.getMetricValue(metrics, rule.metric, rule.metricLabel);
+        const value = this.getMetricValue(metrics, rule.metric, rule.metricLabel, deviceId);
         if (value === null) {
-          logger.warn(`[interface_traffic] Rule ${rule.name}: Could not get traffic value for ${rule.metricLabel}`);
+          // logger.warn(`[interface_traffic] Rule ${rule.name}: Could not get traffic value for ${rule.metricLabel}`);
           continue;
         }
         currentValue = value;
         conditionMet = this.evaluateCondition(value, rule.operator, rule.threshold);
-        logger.info(`[interface_traffic] Rule ${rule.name}: interface=${rule.metricLabel}, currentValue=${value.toFixed(2)} KB/s, threshold=${rule.threshold}, conditionMet=${conditionMet}`);
       } else {
-        // 数值型指标：使用数值比较
-        const value = this.getMetricValue(metrics, rule.metric, rule.metricLabel);
+        const value = this.getMetricValue(metrics, rule.metric, rule.metricLabel, deviceId);
         if (value === null) {
-          logger.debug(`Could not get metric value for rule ${rule.name}`);
+          // logger.debug(`Could not get metric value for rule ${rule.name}`);
           continue;
         }
         currentValue = value;
         conditionMet = this.evaluateCondition(value, rule.operator, rule.threshold);
       }
       
-      // 更新触发状态
       const state = this.updateTriggerState(rule.id, conditionMet);
 
-      // 检查是否达到持续时间阈值
       if (conditionMet && state.consecutiveCount >= rule.duration) {
-        // 检查是否已有该规则的活跃告警
         const existingAlert = Array.from(this.activeAlerts.values()).find(
           (a) => a.ruleId === rule.id && a.status === 'active'
         );
 
         if (!existingAlert) {
-          // 创建新告警
-          const event = await this.createAlertEvent(rule, currentValue, metrics.system);
+          const event = await this.createAlertEvent(rule, currentValue, metrics.system, deviceId);
           triggeredEvents.push(event);
 
-          // 更新规则最后触发时间
           await this.updateRule(rule.id, { lastTriggeredAt: now });
 
-          // 重置触发计数
           this.triggerStates.set(rule.id, {
             ruleId: rule.id,
             consecutiveCount: 0,
@@ -645,18 +626,18 @@ export class AlertEngine implements IAlertEngine {
   private async createAlertEvent(
     rule: AlertRule,
     currentValue: number,
-    systemMetrics: SystemMetrics
+    systemMetrics: SystemMetrics,
+    deviceId?: string
   ): Promise<AlertEvent> {
     const now = Date.now();
 
-    // 构建告警消息
     const message = this.buildAlertMessage(rule, currentValue);
 
-    // 创建告警事件
     const event: AlertEvent = {
       id: uuidv4(),
       ruleId: rule.id,
       ruleName: rule.name,
+      deviceId,
       severity: rule.severity,
       metric: rule.metric,
       currentValue,
@@ -666,7 +647,6 @@ export class AlertEngine implements IAlertEngine {
       triggeredAt: now,
     };
 
-    // 尝试获取 AI 分析（如果可用）
     try {
       const aiAnalysis = await this.getAIAnalysis(event, systemMetrics);
       if (aiAnalysis) {
@@ -676,11 +656,9 @@ export class AlertEngine implements IAlertEngine {
       logger.warn('Failed to get AI analysis for alert:', error);
     }
 
-    // 保存告警事件
     await this.saveEvent(event);
     this.activeAlerts.set(event.id, event);
 
-    // 记录审计日志
     await auditLogger.log({
       action: 'alert_trigger',
       actor: 'system',
@@ -689,6 +667,7 @@ export class AlertEngine implements IAlertEngine {
         metadata: {
           eventId: event.id,
           ruleId: rule.id,
+            deviceId: event.deviceId,
           metric: rule.metric,
           currentValue,
           threshold: rule.threshold,
@@ -697,11 +676,11 @@ export class AlertEngine implements IAlertEngine {
       },
     });
 
-    // 发送通知
     await this.sendAlertNotification(event, rule);
 
-    // 执行自动响应（如果配置）
     if (rule.autoResponse?.enabled && rule.autoResponse.script) {
+      // Auto response is generally device specific. If we don't have a device ID,
+      // it might fail or pick a default one.
       await this.executeAutoResponse(event, rule);
     }
 
@@ -733,7 +712,6 @@ export class AlertEngine implements IAlertEngine {
     const metric = metricText[rule.metric] || rule.metric;
     const label = rule.metricLabel ? ` (${rule.metricLabel})` : '';
 
-    // 接口状态类型使用不同的消息格式
     if (rule.metric === 'interface_status') {
       const currentStatus = currentValue === 1 ? 'up' : 'down';
       const targetStatus = rule.targetStatus || 'up';
@@ -753,8 +731,6 @@ export class AlertEngine implements IAlertEngine {
     event: AlertEvent,
     systemMetrics: SystemMetrics
   ): Promise<string | undefined> {
-    // TODO: 集成 AIAnalyzer 服务
-    // 目前返回基础分析
     const severityText: Record<AlertSeverity, string> = {
       info: '信息',
       warning: '警告',
@@ -808,22 +784,20 @@ export class AlertEngine implements IAlertEngine {
    * 检查告警恢复
    */
   private async checkAlertRecovery(
-    metrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] }
+    metrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] },
+    deviceId?: string
   ): Promise<void> {
     const now = Date.now();
 
     for (const [eventId, event] of this.activeAlerts) {
       if (event.status !== 'active') continue;
 
-      // 获取对应的规则
       const rule = this.rules.find((r) => r.id === event.ruleId);
       if (!rule) {
-        // 规则已删除，自动解决告警
         await this.resolveAlert(eventId);
         continue;
       }
 
-      // 如果规则已禁用，自动解决告警（不发送恢复通知）
       if (!rule.enabled) {
         event.status = 'resolved';
         event.resolvedAt = now;
@@ -831,7 +805,6 @@ export class AlertEngine implements IAlertEngine {
         await this.saveEvent(event);
         this.activeAlerts.delete(eventId);
 
-        // 记录审计日志
         await auditLogger.log({
           action: 'alert_resolve',
           actor: 'system',
@@ -851,48 +824,36 @@ export class AlertEngine implements IAlertEngine {
 
       let conditionMet = false;
 
-      // 根据指标类型选择不同的评估逻辑
       if (rule.metric === 'interface_status') {
-        // 接口状态类型：使用状态匹配
         const currentStatus = this.getInterfaceStatus(metrics, rule.metricLabel);
         if (currentStatus === null) {
-          logger.debug(`[recovery] Could not get interface status for ${rule.metricLabel}, skipping recovery check`);
           continue;
         }
         
-        // 重要：恢复检查时使用与触发时相同的 targetStatus 默认值 'down'
-        // 这样当接口从 down 恢复到 up 时，conditionMet 会变为 false，触发恢复
         const targetStatus = rule.targetStatus || 'down';
         conditionMet = this.evaluateInterfaceStatus(currentStatus, targetStatus);
         
-        logger.debug(`[recovery] Rule ${rule.name}: interface=${rule.metricLabel}, currentStatus=${currentStatus}, targetStatus=${targetStatus}, conditionMet=${conditionMet}`);
       } else if (rule.metric === 'interface_traffic') {
-        // 接口流量类型：使用数值比较
-        const currentValue = this.getMetricValue(metrics, rule.metric, rule.metricLabel);
+        const currentValue = this.getMetricValue(metrics, rule.metric, rule.metricLabel, deviceId);
         if (currentValue === null) {
-          logger.debug(`[recovery] Could not get traffic value for ${rule.metricLabel}, skipping recovery check`);
           continue;
         }
         
         conditionMet = this.evaluateCondition(currentValue, rule.operator, rule.threshold);
-        logger.debug(`[recovery] Rule ${rule.name}: interface=${rule.metricLabel}, currentValue=${currentValue.toFixed(2)} KB/s, threshold=${rule.threshold}, conditionMet=${conditionMet}`);
       } else {
-        // 数值型指标：使用数值比较
-        const currentValue = this.getMetricValue(metrics, rule.metric, rule.metricLabel);
+        const currentValue = this.getMetricValue(metrics, rule.metric, rule.metricLabel, deviceId);
         if (currentValue === null) continue;
         
         conditionMet = this.evaluateCondition(currentValue, rule.operator, rule.threshold);
       }
 
       if (!conditionMet) {
-        // 条件不再满足，告警恢复
         event.status = 'resolved';
         event.resolvedAt = now;
 
         await this.saveEvent(event);
         this.activeAlerts.delete(eventId);
 
-        // 记录审计日志
         await auditLogger.log({
           action: 'alert_resolve',
           actor: 'system',
@@ -906,7 +867,6 @@ export class AlertEngine implements IAlertEngine {
           },
         });
 
-        // 发送恢复通知
         await this.sendRecoveryNotification(event, rule);
 
         logger.info(`Alert recovered: ${rule.name} (${eventId})`);
@@ -948,9 +908,11 @@ export class AlertEngine implements IAlertEngine {
   private async executeAutoResponse(event: AlertEvent, rule: AlertRule): Promise<void> {
     if (!rule.autoResponse?.script) return;
 
+    // Use deviceId from event, or let executeScript handle default (Phase 1 limitation)
+    const deviceId = event.deviceId;
+
     const script = rule.autoResponse.script;
 
-    // 记录执行意图到审计日志
     await auditLogger.log({
       action: 'script_execute',
       actor: 'system',
@@ -965,15 +927,8 @@ export class AlertEngine implements IAlertEngine {
     });
 
     try {
-      // 检查 RouterOS 连接
-      if (!routerosClient.isConnected()) {
-        throw new Error('RouterOS not connected');
-      }
+      const output = await this.executeScript(script, deviceId);
 
-      // 执行脚本
-      const output = await this.executeScript(script);
-
-      // 更新告警事件
       event.autoResponseResult = {
         executed: true,
         success: true,
@@ -981,7 +936,6 @@ export class AlertEngine implements IAlertEngine {
       };
       await this.saveEvent(event);
 
-      // 记录执行结果到审计日志
       await auditLogger.log({
         action: 'script_execute',
         actor: 'system',
@@ -1000,7 +954,6 @@ export class AlertEngine implements IAlertEngine {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      // 更新告警事件
       event.autoResponseResult = {
         executed: true,
         success: false,
@@ -1008,7 +961,6 @@ export class AlertEngine implements IAlertEngine {
       };
       await this.saveEvent(event);
 
-      // 记录执行失败到审计日志
       await auditLogger.log({
         action: 'script_execute',
         actor: 'system',
@@ -1023,7 +975,6 @@ export class AlertEngine implements IAlertEngine {
         },
       });
 
-      // 发送执行失败通知
       await this.sendAutoResponseFailureNotification(event, rule, errorMessage);
 
       logger.error(`Auto-response failed for ${rule.name}:`, error);
@@ -1033,7 +984,20 @@ export class AlertEngine implements IAlertEngine {
   /**
    * 执行 RouterOS 脚本
    */
-  private async executeScript(script: string): Promise<string> {
+  private async executeScript(script: string, deviceId?: string): Promise<string> {
+    let targetDeviceId = deviceId;
+
+    if (!targetDeviceId) {
+      // Fallback: use first available device
+      const { deviceService } = require('../deviceService');
+      const devices = await deviceService.getAllDevices();
+      if (devices.length === 0) throw new Error('No devices found');
+      targetDeviceId = devices[0].id;
+      logger.warn(`No deviceId provided for script execution, using default: ${targetDeviceId}`);
+    }
+
+    const client = await connectionPool.getClient(targetDeviceId as string);
+
     const lines = script
       .split('\n')
       .map((line) => line.trim())
@@ -1044,7 +1008,7 @@ export class AlertEngine implements IAlertEngine {
     for (const line of lines) {
       try {
         const { apiCommand, params } = this.convertToApiFormat(line);
-        const response = await routerosClient.executeRaw(apiCommand, params);
+        const response = await client.executeRaw(apiCommand, params);
 
         if (response !== null && response !== undefined) {
           if (Array.isArray(response) && response.length > 0) {

@@ -4,12 +4,19 @@
  */
 
 import { Request, Response } from 'express';
-import { routerosClient } from '../services/routerosClient';
+import { connectionPool } from '../services/connectionPool';
+import { deviceService } from '../services/deviceService';
 import { IPv6FilterRule } from '../types';
 import { logger } from '../utils/logger';
 
 // RouterOS API 路径常量
 const IPV6_FIREWALL_FILTER_PATH = '/ipv6/firewall/filter';
+
+async function getClient(req: Request) {
+  const deviceId = (req.query.deviceId as string) || (await deviceService.getAllDevices())[0]?.id;
+  if (!deviceId) throw new Error('Device ID is required');
+  return await connectionPool.getClient(deviceId);
+}
 
 // ==================== IPv6 Firewall Filter 相关 ====================
 
@@ -17,12 +24,13 @@ const IPV6_FIREWALL_FILTER_PATH = '/ipv6/firewall/filter';
  * 获取所有 IPv6 Filter 规则
  * GET /api/ipv6/firewall/filter
  */
-export async function getAllIPv6FilterRules(_req: Request, res: Response): Promise<void> {
+export async function getAllIPv6FilterRules(req: Request, res: Response): Promise<void> {
   try {
-    const rules = await routerosClient.print<IPv6FilterRule>(IPV6_FIREWALL_FILTER_PATH);
+    const client = await getClient(req);
+    const rules = await client.print<IPv6FilterRule>(IPV6_FIREWALL_FILTER_PATH);
     const data = Array.isArray(rules) ? rules : [];
 
-    logger.info(`Returning ${data.length} IPv6 filter rules`);
+    // logger.info(`Returning ${data.length} IPv6 filter rules`);
 
     res.json({
       success: true,
@@ -53,7 +61,8 @@ export async function getIPv6FilterRuleById(req: Request, res: Response): Promis
       return;
     }
 
-    const rule = await routerosClient.getById<IPv6FilterRule>(IPV6_FIREWALL_FILTER_PATH, id);
+    const client = await getClient(req);
+    const rule = await client.getById<IPv6FilterRule>(IPV6_FIREWALL_FILTER_PATH, id);
 
     if (!rule) {
       res.status(404).json({
@@ -121,7 +130,8 @@ export async function createIPv6FilterRule(req: Request, res: Response): Promise
       return;
     }
 
-    const newRule = await routerosClient.add<IPv6FilterRule>(IPV6_FIREWALL_FILTER_PATH, data);
+    const client = await getClient(req);
+    const newRule = await client.add<IPv6FilterRule>(IPV6_FIREWALL_FILTER_PATH, data);
 
     logger.info(`Created IPv6 filter rule: chain=${data.chain}, action=${data.action}`);
 
@@ -188,7 +198,8 @@ export async function updateIPv6FilterRule(req: Request, res: Response): Promise
       }
     }
 
-    const updatedRule = await routerosClient.set<IPv6FilterRule>(
+    const client = await getClient(req);
+    const updatedRule = await client.set<IPv6FilterRule>(
       IPV6_FIREWALL_FILTER_PATH,
       id,
       updateData
@@ -227,7 +238,8 @@ export async function deleteIPv6FilterRule(req: Request, res: Response): Promise
       return;
     }
 
-    await routerosClient.remove(IPV6_FIREWALL_FILTER_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IPV6_FIREWALL_FILTER_PATH, id);
 
     logger.info(`Deleted IPv6 filter rule: ${id}`);
 
@@ -260,8 +272,9 @@ export async function enableIPv6FilterRule(req: Request, res: Response): Promise
       return;
     }
 
-    await routerosClient.enable(IPV6_FIREWALL_FILTER_PATH, id);
-    const updatedRule = await routerosClient.getById<IPv6FilterRule>(IPV6_FIREWALL_FILTER_PATH, id);
+    const client = await getClient(req);
+    await client.enable(IPV6_FIREWALL_FILTER_PATH, id);
+    const updatedRule = await client.getById<IPv6FilterRule>(IPV6_FIREWALL_FILTER_PATH, id);
 
     logger.info(`Enabled IPv6 filter rule: ${id}`);
 
@@ -295,8 +308,9 @@ export async function disableIPv6FilterRule(req: Request, res: Response): Promis
       return;
     }
 
-    await routerosClient.disable(IPV6_FIREWALL_FILTER_PATH, id);
-    const updatedRule = await routerosClient.getById<IPv6FilterRule>(IPV6_FIREWALL_FILTER_PATH, id);
+    const client = await getClient(req);
+    await client.disable(IPV6_FIREWALL_FILTER_PATH, id);
+    const updatedRule = await client.getById<IPv6FilterRule>(IPV6_FIREWALL_FILTER_PATH, id);
 
     logger.info(`Disabled IPv6 filter rule: ${id}`);
 

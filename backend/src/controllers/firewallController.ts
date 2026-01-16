@@ -5,7 +5,8 @@
  */
 
 import { Request, Response } from 'express';
-import { routerosClient } from '../services/routerosClient';
+import { connectionPool } from '../services/connectionPool';
+import { deviceService } from '../services/deviceService';
 import { logger } from '../utils/logger';
 
 // RouterOS API 路径
@@ -14,18 +15,25 @@ const FIREWALL_NAT_PATH = '/ip/firewall/nat';
 const FIREWALL_MANGLE_PATH = '/ip/firewall/mangle';
 const FIREWALL_ADDRESS_LIST_PATH = '/ip/firewall/address-list';
 
+async function getClient(req: Request) {
+  const deviceId = (req.query.deviceId as string) || (await deviceService.getAllDevices())[0]?.id;
+  if (!deviceId) throw new Error('Device ID is required');
+  return await connectionPool.getClient(deviceId);
+}
+
 // ==================== Filter Rules (只读) ====================
 
 /**
  * 获取所有 Filter 规则
  * GET /api/firewall/filter
  */
-export async function getAllFilterRules(_req: Request, res: Response): Promise<void> {
+export async function getAllFilterRules(req: Request, res: Response): Promise<void> {
   try {
-    const rules = await routerosClient.print<Record<string, unknown>>(FIREWALL_FILTER_PATH);
+    const client = await getClient(req);
+    const rules = await client.print<Record<string, unknown>>(FIREWALL_FILTER_PATH);
     const data = Array.isArray(rules) ? rules : [];
     
-    logger.info(`Returning ${data.length} filter rules`);
+    // logger.info(`Returning ${data.length} filter rules`);
     
     res.json({
       success: true,
@@ -56,7 +64,8 @@ export async function getFilterRuleById(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const rule = await routerosClient.getById<Record<string, unknown>>(FIREWALL_FILTER_PATH, id);
+    const client = await getClient(req);
+    const rule = await client.getById<Record<string, unknown>>(FIREWALL_FILTER_PATH, id);
     
     if (!rule) {
       res.status(404).json({
@@ -85,12 +94,13 @@ export async function getFilterRuleById(req: Request, res: Response): Promise<vo
  * 获取所有 NAT 规则
  * GET /api/firewall/nat
  */
-export async function getAllNatRules(_req: Request, res: Response): Promise<void> {
+export async function getAllNatRules(req: Request, res: Response): Promise<void> {
   try {
-    const rules = await routerosClient.print<Record<string, unknown>>(FIREWALL_NAT_PATH);
+    const client = await getClient(req);
+    const rules = await client.print<Record<string, unknown>>(FIREWALL_NAT_PATH);
     const data = Array.isArray(rules) ? rules : [];
     
-    logger.info(`Returning ${data.length} NAT rules`);
+    // logger.info(`Returning ${data.length} NAT rules`);
     
     res.json({
       success: true,
@@ -121,7 +131,8 @@ export async function getNatRuleById(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const rule = await routerosClient.getById<Record<string, unknown>>(FIREWALL_NAT_PATH, id);
+    const client = await getClient(req);
+    const rule = await client.getById<Record<string, unknown>>(FIREWALL_NAT_PATH, id);
     
     if (!rule) {
       res.status(404).json({
@@ -168,7 +179,8 @@ export async function createNatRule(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const newRule = await routerosClient.add<Record<string, unknown>>(
+    const client = await getClient(req);
+    const newRule = await client.add<Record<string, unknown>>(
       FIREWALL_NAT_PATH,
       data
     );
@@ -214,7 +226,8 @@ export async function updateNatRule(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const updatedRule = await routerosClient.set<Record<string, unknown>>(
+    const client = await getClient(req);
+    const updatedRule = await client.set<Record<string, unknown>>(
       FIREWALL_NAT_PATH,
       id,
       updateData
@@ -252,7 +265,8 @@ export async function deleteNatRule(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    await routerosClient.remove(FIREWALL_NAT_PATH, id);
+    const client = await getClient(req);
+    await client.remove(FIREWALL_NAT_PATH, id);
     
     logger.info(`Deleted NAT rule: ${id}`);
     
@@ -285,8 +299,9 @@ export async function enableNatRule(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    await routerosClient.enable(FIREWALL_NAT_PATH, id);
-    const updatedRule = await routerosClient.getById<Record<string, unknown>>(FIREWALL_NAT_PATH, id);
+    const client = await getClient(req);
+    await client.enable(FIREWALL_NAT_PATH, id);
+    const updatedRule = await client.getById<Record<string, unknown>>(FIREWALL_NAT_PATH, id);
     
     logger.info(`Enabled NAT rule: ${id}`);
     
@@ -320,8 +335,9 @@ export async function disableNatRule(req: Request, res: Response): Promise<void>
       return;
     }
 
-    await routerosClient.disable(FIREWALL_NAT_PATH, id);
-    const updatedRule = await routerosClient.getById<Record<string, unknown>>(FIREWALL_NAT_PATH, id);
+    const client = await getClient(req);
+    await client.disable(FIREWALL_NAT_PATH, id);
+    const updatedRule = await client.getById<Record<string, unknown>>(FIREWALL_NAT_PATH, id);
     
     logger.info(`Disabled NAT rule: ${id}`);
     
@@ -345,12 +361,13 @@ export async function disableNatRule(req: Request, res: Response): Promise<void>
  * 获取所有 Mangle 规则
  * GET /api/firewall/mangle
  */
-export async function getAllMangleRules(_req: Request, res: Response): Promise<void> {
+export async function getAllMangleRules(req: Request, res: Response): Promise<void> {
   try {
-    const rules = await routerosClient.print<Record<string, unknown>>(FIREWALL_MANGLE_PATH);
+    const client = await getClient(req);
+    const rules = await client.print<Record<string, unknown>>(FIREWALL_MANGLE_PATH);
     const data = Array.isArray(rules) ? rules : [];
     
-    logger.info(`Returning ${data.length} mangle rules`);
+    // logger.info(`Returning ${data.length} mangle rules`);
     
     res.json({
       success: true,
@@ -381,7 +398,8 @@ export async function getMangleRuleById(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const rule = await routerosClient.getById<Record<string, unknown>>(FIREWALL_MANGLE_PATH, id);
+    const client = await getClient(req);
+    const rule = await client.getById<Record<string, unknown>>(FIREWALL_MANGLE_PATH, id);
     
     if (!rule) {
       res.status(404).json({
@@ -411,12 +429,13 @@ export async function getMangleRuleById(req: Request, res: Response): Promise<vo
  * 获取所有地址列表条目
  * GET /api/firewall/address-list
  */
-export async function getAllAddressListEntries(_req: Request, res: Response): Promise<void> {
+export async function getAllAddressListEntries(req: Request, res: Response): Promise<void> {
   try {
-    const entries = await routerosClient.print<Record<string, unknown>>(FIREWALL_ADDRESS_LIST_PATH);
+    const client = await getClient(req);
+    const entries = await client.print<Record<string, unknown>>(FIREWALL_ADDRESS_LIST_PATH);
     const data = Array.isArray(entries) ? entries : [];
     
-    logger.info(`Returning ${data.length} address list entries`);
+    // logger.info(`Returning ${data.length} address list entries`);
     
     res.json({
       success: true,
@@ -455,7 +474,8 @@ export async function createAddressListEntry(req: Request, res: Response): Promi
       return;
     }
 
-    const newEntry = await routerosClient.add<Record<string, unknown>>(
+    const client = await getClient(req);
+    const newEntry = await client.add<Record<string, unknown>>(
       FIREWALL_ADDRESS_LIST_PATH,
       data
     );
@@ -501,7 +521,8 @@ export async function updateAddressListEntry(req: Request, res: Response): Promi
       return;
     }
 
-    const updatedEntry = await routerosClient.set<Record<string, unknown>>(
+    const client = await getClient(req);
+    const updatedEntry = await client.set<Record<string, unknown>>(
       FIREWALL_ADDRESS_LIST_PATH,
       id,
       updateData
@@ -539,7 +560,8 @@ export async function deleteAddressListEntry(req: Request, res: Response): Promi
       return;
     }
 
-    await routerosClient.remove(FIREWALL_ADDRESS_LIST_PATH, id);
+    const client = await getClient(req);
+    await client.remove(FIREWALL_ADDRESS_LIST_PATH, id);
     
     logger.info(`Deleted address list entry: ${id}`);
     

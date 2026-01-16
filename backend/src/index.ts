@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { logger } from './utils/logger';
-import { connectionRoutes, interfaceRoutes, ipRoutes, ipv6Routes, systemRoutes, dashboardRoutes, firewallRoutes, containerRoutes, aiRoutes, aiOpsRoutes } from './routes';
+import { connectionRoutes, deviceRoutes, interfaceRoutes, ipRoutes, ipv6Routes, systemRoutes, dashboardRoutes, firewallRoutes, containerRoutes, aiRoutes, aiOpsRoutes } from './routes';
 import { metricsCollector, scheduler, healthReportService, auditLogger, initializeInspectionHandler, alertEngine } from './services/ai-ops';
 
 // Load environment variables
@@ -36,6 +36,13 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 // API Routes
+app.use('/api/devices', deviceRoutes);
+
+// 设备上下文路由 - 所有需要操作特定设备的接口，都建议挂载在 /api/devices/:deviceId/ 下
+// 但为了保持兼容性和渐进式迁移，我们暂时保留原有路由，但计划修改它们以支持 query param 或者 header 或者 path param
+// 这里的做法是：我们依然保留 /api/interfaces，但内部逻辑需要修改为支持 ?deviceId=xxx
+// 长期方案应该是 /api/devices/:deviceId/interfaces
+// 下面我们先保留原样注册，但在后续步骤中修改 interfaceRoutes 等文件的内部实现
 app.use('/api/connection', connectionRoutes);
 app.use('/api/interfaces', interfaceRoutes);
 app.use('/api/ip', ipRoutes);
@@ -102,14 +109,14 @@ async function initializeAiOpsServices(): Promise<void> {
     
     // 注册告警评估回调到指标采集器
     // 每次采集完指标后自动评估告警规则
-    metricsCollector.registerAlertEvaluationCallback(async (metrics) => {
+    metricsCollector.registerAlertEvaluationCallback(async (deviceId, metrics) => {
       try {
-        const triggeredAlerts = await alertEngine.evaluate(metrics);
+        const triggeredAlerts = await alertEngine.evaluate(metrics, deviceId);
         if (triggeredAlerts.length > 0) {
-          logger.info(`Periodic alert evaluation triggered ${triggeredAlerts.length} alerts`);
+          logger.info(`Periodic alert evaluation triggered ${triggeredAlerts.length} alerts on device ${deviceId}`);
         }
       } catch (error) {
-        logger.error('Periodic alert evaluation failed:', error);
+        logger.error(`Periodic alert evaluation failed for device ${deviceId}:`, error);
       }
     });
     logger.info('Alert evaluation callback registered to MetricsCollector');

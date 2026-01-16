@@ -1,7 +1,8 @@
 /**
  * 路由导出
  */
-export { default as connectionRoutes } from './connectionRoutes';
+export { default as connectionRoutes } from './connectionRoutes'; // Keep for backward compatibility or global status
+export { deviceRoutes } from './deviceRoutes';
 export { default as interfaceRoutes } from './interfaceRoutes';
 export { default as ipRoutes } from './ipRoutes';
 export { default as ipv6Routes } from './ipv6Routes';

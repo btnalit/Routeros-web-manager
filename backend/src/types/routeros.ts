@@ -6,11 +6,24 @@
 // ==================== 连接配置 ====================
 
 /**
- * RouterOS 连接配置
+ * 设备配置
+ */
+export interface Device {
+  id: string;          // 唯一标识 (UUID)
+  name: string;        // 设备别名
+  host: string;        // RouterOS 地址
+  port: number;        // API 端口，默认 8728/8729
+  username: string;    // 用户名
+  password: string;    // 密码
+  useTLS: boolean;     // 是否使用 TLS/SSL
+}
+
+/**
+ * RouterOS 连接配置 (兼容旧代码，也用于单个连接)
  */
 export interface RouterOSConfig {
   host: string;        // RouterOS 地址
-  port: number;        // API 端口，默认 443
+  port: number;        // API 端口
   username: string;    // 用户名
   password: string;    // 密码
   useTLS: boolean;     // 是否使用 HTTPS
@@ -140,6 +153,7 @@ export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
  */
 export interface ConnectionStatus {
   connected: boolean;
+  deviceId?: string;     // 当前连接的设备 ID
   host?: string;
   lastConnected?: string;
   error?: string;

@@ -9,7 +9,8 @@
  * - 脱敏处理敏感信息
  */
 
-import { routerosClient } from '../routerosClient';
+import { connectionPool } from '../connectionPool';
+import { deviceService } from '../deviceService';
 import {
   IContextBuilder,
   RouterOSContext,
@@ -195,7 +196,7 @@ export class ContextBuilderService implements IContextBuilder {
    * 包括连接状态、系统信息等
    */
   async getConnectionContext(): Promise<RouterOSContext> {
-    const connectionStatus = this.getConnectionStatus();
+    const connectionStatus = await this.getConnectionStatus();
     
     // 如果未连接，直接返回基本状态
     if (!connectionStatus.connected) {
@@ -224,9 +225,16 @@ export class ContextBuilderService implements IContextBuilder {
   /**
    * 获取连接状态
    */
-  private getConnectionStatus(): RouterOSConnectionContext {
-    const connected = routerosClient.isConnected();
-    const config = routerosClient.getConfig();
+  private async getConnectionStatus(): Promise<RouterOSConnectionContext> {
+    // TODO: Support multi-device
+    const devices = await deviceService.getAllDevices();
+    if (devices.length === 0) return { connected: false, host: '' };
+
+    const deviceId = devices[0].id;
+    const client = await connectionPool.getClient(deviceId);
+
+    const connected = client.isConnected();
+    const config = client.getConfig();
 
     return {
       connected,
@@ -238,13 +246,19 @@ export class ContextBuilderService implements IContextBuilder {
    * 获取系统信息
    */
   private async getSystemInfo(): Promise<RouterOSSystemInfo | undefined> {
+    // TODO: Support multi-device
+    const devices = await deviceService.getAllDevices();
+    if (devices.length === 0) return undefined;
+    const deviceId = devices[0].id;
+    const client = await connectionPool.getClient(deviceId);
+
     try {
       // 获取系统资源
-      const resources = await routerosClient.print<SystemResource>('/system/resource');
+      const resources = await client.print<SystemResource>('/system/resource');
       const resource = resources?.[0];
 
       // 获取系统身份
-      const identities = await routerosClient.print<SystemIdentity>('/system/identity');
+      const identities = await client.print<SystemIdentity>('/system/identity');
       const identity = identities?.[0];
 
       if (!resource) {
@@ -274,12 +288,18 @@ export class ContextBuilderService implements IContextBuilder {
       throw new Error(`Unknown config section: ${section}`);
     }
 
-    if (!routerosClient.isConnected()) {
+    // TODO: Support multi-device
+    const devices = await deviceService.getAllDevices();
+    if (devices.length === 0) throw new Error('No devices configured');
+    const deviceId = devices[0].id;
+    const client = await connectionPool.getClient(deviceId);
+
+    if (!client.isConnected()) {
       throw new Error('Not connected to RouterOS');
     }
 
     try {
-      const data = await routerosClient.print(path);
+      const data = await client.print(path);
       // 对获取的配置进行脱敏处理
       return this.sanitizeConfig(data);
     } catch (error) {

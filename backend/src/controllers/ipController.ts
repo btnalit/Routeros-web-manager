@@ -4,7 +4,8 @@
  */
 
 import { Request, Response } from 'express';
-import { routerosClient } from '../services/routerosClient';
+import { connectionPool } from '../services/connectionPool';
+import { deviceService } from '../services/deviceService';
 import { IpAddress, Route } from '../types';
 import { logger } from '../utils/logger';
 
@@ -18,15 +19,22 @@ const IP_DHCP_SERVER_LEASE_PATH = '/ip/dhcp-server/lease';
 const IP_SOCKS_PATH = '/ip/socks';
 const IP_ARP_PATH = '/ip/arp';
 
+async function getClient(req: Request) {
+  const deviceId = (req.query.deviceId as string) || (await deviceService.getAllDevices())[0]?.id;
+  if (!deviceId) throw new Error('Device ID is required');
+  return await connectionPool.getClient(deviceId);
+}
+
 // ==================== IP Address 相关 ====================
 
 /**
  * 获取所有 IP 地址
  * GET /api/ip/addresses
  */
-export async function getAllAddresses(_req: Request, res: Response): Promise<void> {
+export async function getAllAddresses(req: Request, res: Response): Promise<void> {
   try {
-    const addresses = await routerosClient.print<IpAddress>(IP_ADDRESS_PATH);
+    const client = await getClient(req);
+    const addresses = await client.print<IpAddress>(IP_ADDRESS_PATH);
     
     res.json({
       success: true,
@@ -55,7 +63,8 @@ export async function getAddressById(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const address = await routerosClient.getById<IpAddress>(IP_ADDRESS_PATH, id);
+    const client = await getClient(req);
+    const address = await client.getById<IpAddress>(IP_ADDRESS_PATH, id);
     
     if (!address) {
       res.status(404).json({ success: false, error: 'IP 地址不存在' });
@@ -94,7 +103,8 @@ export async function addAddress(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const newAddress = await routerosClient.add<IpAddress>(IP_ADDRESS_PATH, addressData);
+    const client = await getClient(req);
+    const newAddress = await client.add<IpAddress>(IP_ADDRESS_PATH, addressData);
     res.status(201).json({ success: true, data: newAddress, message: 'IP 地址已添加' });
   } catch (error) {
     logger.error('Failed to add IP address:', error);
@@ -136,7 +146,8 @@ export async function updateAddress(req: Request, res: Response): Promise<void> 
       }
     }
 
-    const updatedAddress = await routerosClient.set<IpAddress>(IP_ADDRESS_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedAddress = await client.set<IpAddress>(IP_ADDRESS_PATH, id, updateData);
     res.json({ success: true, data: updatedAddress, message: 'IP 地址已更新' });
   } catch (error) {
     logger.error('Failed to update IP address:', error);
@@ -160,7 +171,8 @@ export async function deleteAddress(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    await routerosClient.remove(IP_ADDRESS_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IP_ADDRESS_PATH, id);
     res.json({ success: true, message: 'IP 地址已删除' });
   } catch (error) {
     logger.error('Failed to delete IP address:', error);
@@ -178,9 +190,10 @@ export async function deleteAddress(req: Request, res: Response): Promise<void> 
  * 获取所有路由
  * GET /api/ip/routes
  */
-export async function getAllRoutes(_req: Request, res: Response): Promise<void> {
+export async function getAllRoutes(req: Request, res: Response): Promise<void> {
   try {
-    const routes = await routerosClient.print<Route>(IP_ROUTE_PATH);
+    const client = await getClient(req);
+    const routes = await client.print<Route>(IP_ROUTE_PATH);
     res.json({ success: true, data: routes });
   } catch (error) {
     logger.error('Failed to get routes:', error);
@@ -203,7 +216,8 @@ export async function getRouteById(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const route = await routerosClient.getById<Route>(IP_ROUTE_PATH, id);
+    const client = await getClient(req);
+    const route = await client.getById<Route>(IP_ROUTE_PATH, id);
     if (!route) {
       res.status(404).json({ success: false, error: '路由不存在' });
       return;
@@ -232,7 +246,8 @@ export async function addRoute(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const newRoute = await routerosClient.add<Route>(IP_ROUTE_PATH, routeData);
+    const client = await getClient(req);
+    const newRoute = await client.add<Route>(IP_ROUTE_PATH, routeData);
     res.status(201).json({ success: true, data: newRoute, message: '路由已添加' });
   } catch (error) {
     logger.error('Failed to add route:', error);
@@ -263,7 +278,8 @@ export async function updateRoute(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const updatedRoute = await routerosClient.set<Route>(IP_ROUTE_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedRoute = await client.set<Route>(IP_ROUTE_PATH, id, updateData);
     res.json({ success: true, data: updatedRoute, message: '路由已更新' });
   } catch (error) {
     logger.error('Failed to update route:', error);
@@ -286,7 +302,8 @@ export async function deleteRoute(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await routerosClient.remove(IP_ROUTE_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IP_ROUTE_PATH, id);
     res.json({ success: true, message: '路由已删除' });
   } catch (error) {
     logger.error('Failed to delete route:', error);
@@ -304,9 +321,10 @@ export async function deleteRoute(req: Request, res: Response): Promise<void> {
  * 获取所有 IP Pool
  * GET /api/ip/pools
  */
-export async function getAllPools(_req: Request, res: Response): Promise<void> {
+export async function getAllPools(req: Request, res: Response): Promise<void> {
   try {
-    const pools = await routerosClient.print<any>(IP_POOL_PATH);
+    const client = await getClient(req);
+    const pools = await client.print<any>(IP_POOL_PATH);
     res.json({ success: true, data: pools });
   } catch (error) {
     logger.error('Failed to get IP pools:', error);
@@ -330,7 +348,8 @@ export async function addPool(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const newPool = await routerosClient.add<any>(IP_POOL_PATH, poolData);
+    const client = await getClient(req);
+    const newPool = await client.add<any>(IP_POOL_PATH, poolData);
     res.status(201).json({ success: true, data: newPool, message: 'IP Pool 已添加' });
   } catch (error) {
     logger.error('Failed to add IP pool:', error);
@@ -355,7 +374,8 @@ export async function updatePool(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const updatedPool = await routerosClient.set<any>(IP_POOL_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedPool = await client.set<any>(IP_POOL_PATH, id, updateData);
     res.json({ success: true, data: updatedPool, message: 'IP Pool 已更新' });
   } catch (error) {
     logger.error('Failed to update IP pool:', error);
@@ -378,7 +398,8 @@ export async function deletePool(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await routerosClient.remove(IP_POOL_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IP_POOL_PATH, id);
     res.json({ success: true, message: 'IP Pool 已删除' });
   } catch (error) {
     logger.error('Failed to delete IP pool:', error);
@@ -396,9 +417,10 @@ export async function deletePool(req: Request, res: Response): Promise<void> {
  * 获取所有 DHCP Client
  * GET /api/ip/dhcp-client
  */
-export async function getAllDhcpClients(_req: Request, res: Response): Promise<void> {
+export async function getAllDhcpClients(req: Request, res: Response): Promise<void> {
   try {
-    const clients = await routerosClient.print<any>(IP_DHCP_CLIENT_PATH);
+    const client = await getClient(req);
+    const clients = await client.print<any>(IP_DHCP_CLIENT_PATH);
     res.json({ success: true, data: clients });
   } catch (error) {
     logger.error('Failed to get DHCP clients:', error);
@@ -422,7 +444,8 @@ export async function addDhcpClient(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const newClient = await routerosClient.add<any>(IP_DHCP_CLIENT_PATH, clientData);
+    const client = await getClient(req);
+    const newClient = await client.add<any>(IP_DHCP_CLIENT_PATH, clientData);
     res.status(201).json({ success: true, data: newClient, message: 'DHCP Client 已添加' });
   } catch (error) {
     logger.error('Failed to add DHCP client:', error);
@@ -447,7 +470,8 @@ export async function updateDhcpClient(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const updatedClient = await routerosClient.set<any>(IP_DHCP_CLIENT_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedClient = await client.set<any>(IP_DHCP_CLIENT_PATH, id, updateData);
     res.json({ success: true, data: updatedClient, message: 'DHCP Client 已更新' });
   } catch (error) {
     logger.error('Failed to update DHCP client:', error);
@@ -470,7 +494,8 @@ export async function deleteDhcpClient(req: Request, res: Response): Promise<voi
       return;
     }
 
-    await routerosClient.remove(IP_DHCP_CLIENT_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IP_DHCP_CLIENT_PATH, id);
     res.json({ success: true, message: 'DHCP Client 已删除' });
   } catch (error) {
     logger.error('Failed to delete DHCP client:', error);
@@ -493,7 +518,8 @@ export async function enableDhcpClient(req: Request, res: Response): Promise<voi
       return;
     }
 
-    await routerosClient.enable(IP_DHCP_CLIENT_PATH, id);
+    const client = await getClient(req);
+    await client.enable(IP_DHCP_CLIENT_PATH, id);
     res.json({ success: true, message: 'DHCP Client 已启用' });
   } catch (error) {
     logger.error('Failed to enable DHCP client:', error);
@@ -516,7 +542,8 @@ export async function disableDhcpClient(req: Request, res: Response): Promise<vo
       return;
     }
 
-    await routerosClient.disable(IP_DHCP_CLIENT_PATH, id);
+    const client = await getClient(req);
+    await client.disable(IP_DHCP_CLIENT_PATH, id);
     res.json({ success: true, message: 'DHCP Client 已禁用' });
   } catch (error) {
     logger.error('Failed to disable DHCP client:', error);
@@ -534,9 +561,10 @@ export async function disableDhcpClient(req: Request, res: Response): Promise<vo
  * 获取所有 DHCP Server
  * GET /api/ip/dhcp-server
  */
-export async function getAllDhcpServers(_req: Request, res: Response): Promise<void> {
+export async function getAllDhcpServers(req: Request, res: Response): Promise<void> {
   try {
-    const servers = await routerosClient.print<any>(IP_DHCP_SERVER_PATH);
+    const client = await getClient(req);
+    const servers = await client.print<any>(IP_DHCP_SERVER_PATH);
     res.json({ success: true, data: servers });
   } catch (error) {
     logger.error('Failed to get DHCP servers:', error);
@@ -560,7 +588,8 @@ export async function addDhcpServer(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const newServer = await routerosClient.add<any>(IP_DHCP_SERVER_PATH, serverData);
+    const client = await getClient(req);
+    const newServer = await client.add<any>(IP_DHCP_SERVER_PATH, serverData);
     res.status(201).json({ success: true, data: newServer, message: 'DHCP Server 已添加' });
   } catch (error) {
     logger.error('Failed to add DHCP server:', error);
@@ -585,7 +614,8 @@ export async function updateDhcpServer(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const updatedServer = await routerosClient.set<any>(IP_DHCP_SERVER_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedServer = await client.set<any>(IP_DHCP_SERVER_PATH, id, updateData);
     res.json({ success: true, data: updatedServer, message: 'DHCP Server 已更新' });
   } catch (error) {
     logger.error('Failed to update DHCP server:', error);
@@ -608,7 +638,8 @@ export async function deleteDhcpServer(req: Request, res: Response): Promise<voi
       return;
     }
 
-    await routerosClient.remove(IP_DHCP_SERVER_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IP_DHCP_SERVER_PATH, id);
     res.json({ success: true, message: 'DHCP Server 已删除' });
   } catch (error) {
     logger.error('Failed to delete DHCP server:', error);
@@ -631,7 +662,8 @@ export async function enableDhcpServer(req: Request, res: Response): Promise<voi
       return;
     }
 
-    await routerosClient.enable(IP_DHCP_SERVER_PATH, id);
+    const client = await getClient(req);
+    await client.enable(IP_DHCP_SERVER_PATH, id);
     res.json({ success: true, message: 'DHCP Server 已启用' });
   } catch (error) {
     logger.error('Failed to enable DHCP server:', error);
@@ -654,7 +686,8 @@ export async function disableDhcpServer(req: Request, res: Response): Promise<vo
       return;
     }
 
-    await routerosClient.disable(IP_DHCP_SERVER_PATH, id);
+    const client = await getClient(req);
+    await client.disable(IP_DHCP_SERVER_PATH, id);
     res.json({ success: true, message: 'DHCP Server 已禁用' });
   } catch (error) {
     logger.error('Failed to disable DHCP server:', error);
@@ -672,9 +705,10 @@ export async function disableDhcpServer(req: Request, res: Response): Promise<vo
  * 获取所有 DHCP Server Network
  * GET /api/ip/dhcp-server/networks
  */
-export async function getAllDhcpNetworks(_req: Request, res: Response): Promise<void> {
+export async function getAllDhcpNetworks(req: Request, res: Response): Promise<void> {
   try {
-    const networks = await routerosClient.print<any>(IP_DHCP_SERVER_NETWORK_PATH);
+    const client = await getClient(req);
+    const networks = await client.print<any>(IP_DHCP_SERVER_NETWORK_PATH);
     res.json({ success: true, data: networks });
   } catch (error) {
     logger.error('Failed to get DHCP networks:', error);
@@ -698,7 +732,8 @@ export async function addDhcpNetwork(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const newNetwork = await routerosClient.add<any>(IP_DHCP_SERVER_NETWORK_PATH, networkData);
+    const client = await getClient(req);
+    const newNetwork = await client.add<any>(IP_DHCP_SERVER_NETWORK_PATH, networkData);
     res.status(201).json({ success: true, data: newNetwork, message: 'DHCP Network 已添加' });
   } catch (error) {
     logger.error('Failed to add DHCP network:', error);
@@ -723,7 +758,8 @@ export async function updateDhcpNetwork(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const updatedNetwork = await routerosClient.set<any>(IP_DHCP_SERVER_NETWORK_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedNetwork = await client.set<any>(IP_DHCP_SERVER_NETWORK_PATH, id, updateData);
     res.json({ success: true, data: updatedNetwork, message: 'DHCP Network 已更新' });
   } catch (error) {
     logger.error('Failed to update DHCP network:', error);
@@ -746,7 +782,8 @@ export async function deleteDhcpNetwork(req: Request, res: Response): Promise<vo
       return;
     }
 
-    await routerosClient.remove(IP_DHCP_SERVER_NETWORK_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IP_DHCP_SERVER_NETWORK_PATH, id);
     res.json({ success: true, message: 'DHCP Network 已删除' });
   } catch (error) {
     logger.error('Failed to delete DHCP network:', error);
@@ -764,9 +801,10 @@ export async function deleteDhcpNetwork(req: Request, res: Response): Promise<vo
  * 获取所有 DHCP Server Lease
  * GET /api/ip/dhcp-server/leases
  */
-export async function getAllDhcpLeases(_req: Request, res: Response): Promise<void> {
+export async function getAllDhcpLeases(req: Request, res: Response): Promise<void> {
   try {
-    const leases = await routerosClient.print<any>(IP_DHCP_SERVER_LEASE_PATH);
+    const client = await getClient(req);
+    const leases = await client.print<any>(IP_DHCP_SERVER_LEASE_PATH);
     res.json({ success: true, data: leases });
   } catch (error) {
     logger.error('Failed to get DHCP leases:', error);
@@ -791,9 +829,11 @@ export async function addDhcpLease(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    const client = await getClient(req);
+
     // 如果未指定 server，获取第一个 DHCP Server 的名称
     if (!leaseData.server) {
-      const servers = await routerosClient.print<any>(IP_DHCP_SERVER_PATH);
+      const servers = await client.print<any>(IP_DHCP_SERVER_PATH);
       if (servers.length > 0) {
         leaseData.server = servers[0].name;
         logger.info(`Auto-selected DHCP server: ${leaseData.server}`);
@@ -803,7 +843,7 @@ export async function addDhcpLease(req: Request, res: Response): Promise<void> {
     // 移除 dynamic 字段，静态绑定不需要此字段
     delete leaseData.dynamic;
 
-    const newLease = await routerosClient.add<any>(IP_DHCP_SERVER_LEASE_PATH, leaseData);
+    const newLease = await client.add<any>(IP_DHCP_SERVER_LEASE_PATH, leaseData);
     res.status(201).json({ success: true, data: newLease, message: 'DHCP Lease 已添加' });
   } catch (error) {
     logger.error('Failed to add DHCP lease:', error);
@@ -828,7 +868,8 @@ export async function updateDhcpLease(req: Request, res: Response): Promise<void
       return;
     }
 
-    const updatedLease = await routerosClient.set<any>(IP_DHCP_SERVER_LEASE_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedLease = await client.set<any>(IP_DHCP_SERVER_LEASE_PATH, id, updateData);
     res.json({ success: true, data: updatedLease, message: 'DHCP Lease 已更新' });
   } catch (error) {
     logger.error('Failed to update DHCP lease:', error);
@@ -851,7 +892,8 @@ export async function deleteDhcpLease(req: Request, res: Response): Promise<void
       return;
     }
 
-    await routerosClient.remove(IP_DHCP_SERVER_LEASE_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IP_DHCP_SERVER_LEASE_PATH, id);
     res.json({ success: true, message: 'DHCP Lease 已删除' });
   } catch (error) {
     logger.error('Failed to delete DHCP lease:', error);
@@ -875,8 +917,9 @@ export async function makeDhcpLeaseStatic(req: Request, res: Response): Promise<
       return;
     }
 
+    const client = await getClient(req);
     // 使用 RouterOS 的 make-static 命令
-    await routerosClient.executeRaw('/ip/dhcp-server/lease/make-static', [`=.id=${id}`]);
+    await client.executeRaw('/ip/dhcp-server/lease/make-static', [`=.id=${id}`]);
     res.json({ success: true, message: 'DHCP Lease 已转为静态' });
   } catch (error) {
     logger.error('Failed to make DHCP lease static:', error);
@@ -894,9 +937,10 @@ export async function makeDhcpLeaseStatic(req: Request, res: Response): Promise<
  * 获取所有 Socks 配置
  * GET /api/ip/socks
  */
-export async function getAllSocks(_req: Request, res: Response): Promise<void> {
+export async function getAllSocks(req: Request, res: Response): Promise<void> {
   try {
-    const socks = await routerosClient.print<any>(IP_SOCKS_PATH);
+    const client = await getClient(req);
+    const socks = await client.print<any>(IP_SOCKS_PATH);
     res.json({ success: true, data: socks });
   } catch (error) {
     logger.error('Failed to get socks:', error);
@@ -920,7 +964,8 @@ export async function addSocks(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const newSocks = await routerosClient.add<any>(IP_SOCKS_PATH, socksData);
+    const client = await getClient(req);
+    const newSocks = await client.add<any>(IP_SOCKS_PATH, socksData);
     res.status(201).json({ success: true, data: newSocks, message: 'Socks 已添加' });
   } catch (error) {
     logger.error('Failed to add socks:', error);
@@ -945,7 +990,8 @@ export async function updateSocks(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const updatedSocks = await routerosClient.set<any>(IP_SOCKS_PATH, id, updateData);
+    const client = await getClient(req);
+    const updatedSocks = await client.set<any>(IP_SOCKS_PATH, id, updateData);
     res.json({ success: true, data: updatedSocks, message: 'Socks 已更新' });
   } catch (error) {
     logger.error('Failed to update socks:', error);
@@ -968,7 +1014,8 @@ export async function deleteSocks(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await routerosClient.remove(IP_SOCKS_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IP_SOCKS_PATH, id);
     res.json({ success: true, message: 'Socks 已删除' });
   } catch (error) {
     logger.error('Failed to delete socks:', error);
@@ -991,7 +1038,8 @@ export async function enableSocks(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await routerosClient.enable(IP_SOCKS_PATH, id);
+    const client = await getClient(req);
+    await client.enable(IP_SOCKS_PATH, id);
     res.json({ success: true, message: 'Socks 已启用' });
   } catch (error) {
     logger.error('Failed to enable socks:', error);
@@ -1014,7 +1062,8 @@ export async function disableSocks(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await routerosClient.disable(IP_SOCKS_PATH, id);
+    const client = await getClient(req);
+    await client.disable(IP_SOCKS_PATH, id);
     res.json({ success: true, message: 'Socks 已禁用' });
   } catch (error) {
     logger.error('Failed to disable socks:', error);
@@ -1032,9 +1081,10 @@ export async function disableSocks(req: Request, res: Response): Promise<void> {
  * 获取所有 ARP 条目
  * GET /api/ip/arp
  */
-export async function getAllArp(_req: Request, res: Response): Promise<void> {
+export async function getAllArp(req: Request, res: Response): Promise<void> {
   try {
-    const arpEntries = await routerosClient.print<any>(IP_ARP_PATH);
+    const client = await getClient(req);
+    const arpEntries = await client.print<any>(IP_ARP_PATH);
     res.json({ success: true, data: arpEntries });
   } catch (error) {
     logger.error('Failed to get ARP entries:', error);
@@ -1078,7 +1128,8 @@ export async function addArp(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const newArp = await routerosClient.add<any>(IP_ARP_PATH, arpData);
+    const client = await getClient(req);
+    const newArp = await client.add<any>(IP_ARP_PATH, arpData);
     res.status(201).json({ success: true, data: newArp, message: 'ARP 条目已添加' });
   } catch (error) {
     logger.error('Failed to add ARP entry:', error);
@@ -1101,7 +1152,8 @@ export async function deleteArp(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await routerosClient.remove(IP_ARP_PATH, id);
+    const client = await getClient(req);
+    await client.remove(IP_ARP_PATH, id);
     res.json({ success: true, message: 'ARP 条目已删除' });
   } catch (error) {
     logger.error('Failed to delete ARP entry:', error);

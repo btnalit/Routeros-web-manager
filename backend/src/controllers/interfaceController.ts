@@ -4,27 +4,35 @@
  */
 
 import { Request, Response } from 'express';
-import { routerosClient } from '../services/routerosClient';
+import { connectionPool } from '../services/connectionPool';
 import { NetworkInterface, VethInterface } from '../types';
 import { logger } from '../utils/logger';
+import { deviceService } from '../services/deviceService';
 
 const INTERFACE_PATH = '/interface';
 const L2TP_CLIENT_PATH = '/interface/l2tp-client';
 const PPPOE_CLIENT_PATH = '/interface/pppoe-client';
 const VETH_PATH = '/interface/veth';
 
+async function getClient(req: Request) {
+  const deviceId = (req.query.deviceId as string) || (await deviceService.getAllDevices())[0]?.id;
+  if (!deviceId) throw new Error('Device ID is required');
+  return await connectionPool.getClient(deviceId);
+}
+
 /**
  * 获取所有网络接口
  * GET /api/interfaces
  */
-export async function getAllInterfaces(_req: Request, res: Response): Promise<void> {
+export async function getAllInterfaces(req: Request, res: Response): Promise<void> {
   try {
-    const interfaces = await routerosClient.print<NetworkInterface>(INTERFACE_PATH);
+    const client = await getClient(req);
+    const interfaces = await client.print<NetworkInterface>(INTERFACE_PATH);
     
     // 确保 interfaces 是数组
     const data = Array.isArray(interfaces) ? interfaces : [];
     
-    logger.info(`Returning ${data.length} interfaces`);
+    // logger.info(`Returning ${data.length} interfaces`);
     
     res.json({
       success: true,
@@ -55,7 +63,8 @@ export async function getInterfaceById(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const interfaceData = await routerosClient.getById<NetworkInterface>(INTERFACE_PATH, id);
+    const client = await getClient(req);
+    const interfaceData = await client.getById<NetworkInterface>(INTERFACE_PATH, id);
     
     if (!interfaceData) {
       res.status(404).json({
@@ -103,7 +112,8 @@ export async function updateInterface(req: Request, res: Response): Promise<void
       return;
     }
 
-    const updatedInterface = await routerosClient.set<NetworkInterface>(
+    const client = await getClient(req);
+    const updatedInterface = await client.set<NetworkInterface>(
       INTERFACE_PATH,
       id,
       updateData
@@ -139,8 +149,9 @@ export async function enableInterface(req: Request, res: Response): Promise<void
       return;
     }
 
-    await routerosClient.enable(INTERFACE_PATH, id);
-    const updatedInterface = await routerosClient.getById<NetworkInterface>(INTERFACE_PATH, id);
+    const client = await getClient(req);
+    await client.enable(INTERFACE_PATH, id);
+    const updatedInterface = await client.getById<NetworkInterface>(INTERFACE_PATH, id);
     
     res.json({
       success: true,
@@ -172,8 +183,9 @@ export async function disableInterface(req: Request, res: Response): Promise<voi
       return;
     }
 
-    await routerosClient.disable(INTERFACE_PATH, id);
-    const updatedInterface = await routerosClient.getById<NetworkInterface>(INTERFACE_PATH, id);
+    const client = await getClient(req);
+    await client.disable(INTERFACE_PATH, id);
+    const updatedInterface = await client.getById<NetworkInterface>(INTERFACE_PATH, id);
     
     res.json({
       success: true,
@@ -194,12 +206,13 @@ export async function disableInterface(req: Request, res: Response): Promise<voi
  * 获取所有 L2TP Client 接口
  * GET /api/interfaces/l2tp-client
  */
-export async function getL2tpClients(_req: Request, res: Response): Promise<void> {
+export async function getL2tpClients(req: Request, res: Response): Promise<void> {
   try {
-    const clients = await routerosClient.print<Record<string, unknown>>(L2TP_CLIENT_PATH);
+    const client = await getClient(req);
+    const clients = await client.print<Record<string, unknown>>(L2TP_CLIENT_PATH);
     const data = Array.isArray(clients) ? clients : [];
     
-    logger.info(`Returning ${data.length} L2TP clients`);
+    // logger.info(`Returning ${data.length} L2TP clients`);
     
     res.json({
       success: true,
@@ -230,9 +243,10 @@ export async function getL2tpClientById(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const client = await routerosClient.getById<Record<string, unknown>>(L2TP_CLIENT_PATH, id);
+    const client = await getClient(req);
+    const clientData = await client.getById<Record<string, unknown>>(L2TP_CLIENT_PATH, id);
     
-    if (!client) {
+    if (!clientData) {
       res.status(404).json({
         success: false,
         error: 'L2TP 客户端不存在',
@@ -242,7 +256,7 @@ export async function getL2tpClientById(req: Request, res: Response): Promise<vo
     
     res.json({
       success: true,
-      data: client,
+      data: clientData,
     });
   } catch (error) {
     logger.error('Failed to get L2TP client:', error);
@@ -278,7 +292,8 @@ export async function updateL2tpClient(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const updatedClient = await routerosClient.set<Record<string, unknown>>(
+    const client = await getClient(req);
+    const updatedClient = await client.set<Record<string, unknown>>(
       L2TP_CLIENT_PATH,
       id,
       updateData
@@ -302,12 +317,13 @@ export async function updateL2tpClient(req: Request, res: Response): Promise<voi
  * 获取所有 PPPoE Client 接口
  * GET /api/interfaces/pppoe-client
  */
-export async function getPppoeClients(_req: Request, res: Response): Promise<void> {
+export async function getPppoeClients(req: Request, res: Response): Promise<void> {
   try {
-    const clients = await routerosClient.print<Record<string, unknown>>(PPPOE_CLIENT_PATH);
+    const client = await getClient(req);
+    const clients = await client.print<Record<string, unknown>>(PPPOE_CLIENT_PATH);
     const data = Array.isArray(clients) ? clients : [];
     
-    logger.info(`Returning ${data.length} PPPoE clients`);
+    // logger.info(`Returning ${data.length} PPPoE clients`);
     
     res.json({
       success: true,
@@ -338,9 +354,10 @@ export async function getPppoeClientById(req: Request, res: Response): Promise<v
       return;
     }
 
-    const client = await routerosClient.getById<Record<string, unknown>>(PPPOE_CLIENT_PATH, id);
+    const client = await getClient(req);
+    const clientData = await client.getById<Record<string, unknown>>(PPPOE_CLIENT_PATH, id);
     
-    if (!client) {
+    if (!clientData) {
       res.status(404).json({
         success: false,
         error: 'PPPoE 客户端不存在',
@@ -350,7 +367,7 @@ export async function getPppoeClientById(req: Request, res: Response): Promise<v
     
     res.json({
       success: true,
-      data: client,
+      data: clientData,
     });
   } catch (error) {
     logger.error('Failed to get PPPoE client:', error);
@@ -386,7 +403,8 @@ export async function updatePppoeClient(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const updatedClient = await routerosClient.set<Record<string, unknown>>(
+    const client = await getClient(req);
+    const updatedClient = await client.set<Record<string, unknown>>(
       PPPOE_CLIENT_PATH,
       id,
       updateData
@@ -439,7 +457,8 @@ export async function createL2tpClient(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const newClient = await routerosClient.add<Record<string, unknown>>(
+    const client = await getClient(req);
+    const newClient = await client.add<Record<string, unknown>>(
       L2TP_CLIENT_PATH,
       data
     );
@@ -476,7 +495,8 @@ export async function deleteL2tpClient(req: Request, res: Response): Promise<voi
       return;
     }
 
-    await routerosClient.remove(L2TP_CLIENT_PATH, id);
+    const client = await getClient(req);
+    await client.remove(L2TP_CLIENT_PATH, id);
     
     logger.info(`Deleted L2TP client: ${id}`);
     
@@ -525,7 +545,8 @@ export async function createPppoeClient(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const newClient = await routerosClient.add<Record<string, unknown>>(
+    const client = await getClient(req);
+    const newClient = await client.add<Record<string, unknown>>(
       PPPOE_CLIENT_PATH,
       data
     );
@@ -562,7 +583,8 @@ export async function deletePppoeClient(req: Request, res: Response): Promise<vo
       return;
     }
 
-    await routerosClient.remove(PPPOE_CLIENT_PATH, id);
+    const client = await getClient(req);
+    await client.remove(PPPOE_CLIENT_PATH, id);
     
     logger.info(`Deleted PPPoE client: ${id}`);
     
@@ -586,12 +608,13 @@ export async function deletePppoeClient(req: Request, res: Response): Promise<vo
  * 获取所有 VETH 接口
  * GET /api/interfaces/veth
  */
-export async function getVethInterfaces(_req: Request, res: Response): Promise<void> {
+export async function getVethInterfaces(req: Request, res: Response): Promise<void> {
   try {
-    const interfaces = await routerosClient.print<VethInterface>(VETH_PATH);
+    const client = await getClient(req);
+    const interfaces = await client.print<VethInterface>(VETH_PATH);
     const data = Array.isArray(interfaces) ? interfaces : [];
     
-    logger.info(`Returning ${data.length} VETH interfaces`);
+    // logger.info(`Returning ${data.length} VETH interfaces`);
     
     res.json({
       success: true,
@@ -622,7 +645,8 @@ export async function getVethInterfaceById(req: Request, res: Response): Promise
       return;
     }
 
-    const vethInterface = await routerosClient.getById<VethInterface>(VETH_PATH, id);
+    const client = await getClient(req);
+    const vethInterface = await client.getById<VethInterface>(VETH_PATH, id);
     
     if (!vethInterface) {
       res.status(404).json({
@@ -661,7 +685,8 @@ export async function createVethInterface(req: Request, res: Response): Promise<
       return;
     }
 
-    const newInterface = await routerosClient.add<VethInterface>(
+    const client = await getClient(req);
+    const newInterface = await client.add<VethInterface>(
       VETH_PATH,
       data
     );
@@ -707,7 +732,8 @@ export async function updateVethInterface(req: Request, res: Response): Promise<
       return;
     }
 
-    const updatedInterface = await routerosClient.set<VethInterface>(
+    const client = await getClient(req);
+    const updatedInterface = await client.set<VethInterface>(
       VETH_PATH,
       id,
       updateData
@@ -743,7 +769,8 @@ export async function deleteVethInterface(req: Request, res: Response): Promise<
       return;
     }
 
-    await routerosClient.remove(VETH_PATH, id);
+    const client = await getClient(req);
+    await client.remove(VETH_PATH, id);
     
     logger.info(`Deleted VETH interface: ${id}`);
     

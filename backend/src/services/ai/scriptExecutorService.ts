@@ -29,7 +29,8 @@ import {
   AIAgentData,
   AIAgentSettings,
 } from '../../types/ai';
-import { routerosClient } from '../routerosClient';
+import { connectionPool } from '../connectionPool';
+import { deviceService } from '../deviceService';
 import { logger } from '../../utils/logger';
 
 /**
@@ -163,8 +164,20 @@ export class ScriptExecutorService implements IScriptExecutor {
       };
     }
 
+    // TODO: 目前仅支持默认设备，后续应该让 AI 指定设备
+    const devices = await deviceService.getAllDevices();
+    if (devices.length === 0) {
+      return {
+        success: false,
+        error: '未配置 RouterOS 设备',
+        executedAt,
+      };
+    }
+    const deviceId = devices[0].id;
+    const client = await connectionPool.getClient(deviceId);
+
     // 检查连接状态
-    if (!routerosClient.isConnected()) {
+    if (!client.isConnected()) {
       return {
         success: false,
         error: '未连接到 RouterOS 设备',
@@ -173,7 +186,7 @@ export class ScriptExecutorService implements IScriptExecutor {
     }
 
     try {
-      const output = await this.executeScript(script);
+      const output = await this.executeScript(script, client);
       return {
         success: true,
         output: output || '命令执行成功（无返回数据）',
@@ -193,7 +206,7 @@ export class ScriptExecutorService implements IScriptExecutor {
   /**
    * 执行脚本并返回输出
    */
-  private async executeScript(script: string): Promise<string> {
+  private async executeScript(script: string, client: any): Promise<string> {
     const lines = script
       .split('\n')
       .map(line => line.trim())
@@ -203,7 +216,7 @@ export class ScriptExecutorService implements IScriptExecutor {
 
     for (const line of lines) {
       try {
-        const output = await this.executeCommand(line);
+        const output = await this.executeCommand(line, client);
         if (output) {
           outputs.push(output);
         }
@@ -220,13 +233,13 @@ export class ScriptExecutorService implements IScriptExecutor {
    * 执行单个 RouterOS 命令
    * 将 CLI 格式转换为 API 格式，然后透传到设备
    */
-  private async executeCommand(command: string): Promise<string> {
+  private async executeCommand(command: string, client: any): Promise<string> {
     const { apiCommand, params } = this.convertToApiFormat(command);
     
     logger.info(`Executing: ${apiCommand}, params: ${JSON.stringify(params)}`);
     
     // 直接透传到设备
-    const response = await routerosClient.executeRaw(apiCommand, params);
+    const response = await client.executeRaw(apiCommand, params);
     
     // 格式化输出
     if (response === null || response === undefined) {

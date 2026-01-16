@@ -4,10 +4,17 @@
  */
 
 import { Request, Response } from 'express';
-import { routerosClient } from '../services/routerosClient';
+import { connectionPool } from '../services/connectionPool';
+import { deviceService } from '../services/deviceService';
 import { logger } from '../utils/logger';
 
 const RESOURCE_PATH = '/system/resource';
+
+async function getClient(req: Request) {
+  const deviceId = (req.query.deviceId as string) || (await deviceService.getAllDevices())[0]?.id;
+  if (!deviceId) throw new Error('Device ID is required');
+  return await connectionPool.getClient(deviceId);
+}
 
 /**
  * 系统资源数据接口
@@ -35,9 +42,10 @@ interface SystemResource {
  * 获取系统资源信息
  * GET /api/dashboard/resource
  */
-export async function getSystemResource(_req: Request, res: Response): Promise<void> {
+export async function getSystemResource(req: Request, res: Response): Promise<void> {
   try {
-    const resources = await routerosClient.print<SystemResource>(RESOURCE_PATH);
+    const client = await getClient(req);
+    const resources = await client.print<SystemResource>(RESOURCE_PATH);
     
     if (!resources || resources.length === 0) {
       res.status(404).json({

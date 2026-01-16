@@ -5,7 +5,8 @@
  */
 
 import { Request, Response } from 'express';
-import { routerosClient } from '../services/routerosClient';
+import { connectionPool } from '../services/connectionPool';
+import { deviceService } from '../services/deviceService';
 import { logger } from '../utils/logger';
 
 // RouterOS API 路径
@@ -13,18 +14,25 @@ const CONTAINER_PATH = '/container';
 const CONTAINER_MOUNTS_PATH = '/container/mounts';
 const CONTAINER_ENVS_PATH = '/container/envs';
 
+async function getClient(req: Request) {
+  const deviceId = (req.query.deviceId as string) || (await deviceService.getAllDevices())[0]?.id;
+  if (!deviceId) throw new Error('Device ID is required');
+  return await connectionPool.getClient(deviceId);
+}
+
 // ==================== Containers ====================
 
 /**
  * 获取所有容器
  * GET /api/container
  */
-export async function getAllContainers(_req: Request, res: Response): Promise<void> {
+export async function getAllContainers(req: Request, res: Response): Promise<void> {
   try {
-    const containers = await routerosClient.print<Record<string, unknown>>(CONTAINER_PATH);
+    const client = await getClient(req);
+    const containers = await client.print<Record<string, unknown>>(CONTAINER_PATH);
     const data = Array.isArray(containers) ? containers : [];
     
-    logger.info(`Returning ${data.length} containers`);
+    // logger.info(`Returning ${data.length} containers`);
     
     res.json({
       success: true,
@@ -55,7 +63,8 @@ export async function getContainerById(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const container = await routerosClient.getById<Record<string, unknown>>(CONTAINER_PATH, id);
+    const client = await getClient(req);
+    const container = await client.getById<Record<string, unknown>>(CONTAINER_PATH, id);
     
     if (!container) {
       res.status(404).json({
@@ -111,7 +120,8 @@ export async function createContainer(req: Request, res: Response): Promise<void
       return;
     }
 
-    const newContainer = await routerosClient.add<Record<string, unknown>>(
+    const client = await getClient(req);
+    const newContainer = await client.add<Record<string, unknown>>(
       CONTAINER_PATH,
       data
     );
@@ -157,7 +167,8 @@ export async function updateContainer(req: Request, res: Response): Promise<void
       return;
     }
 
-    const updatedContainer = await routerosClient.set<Record<string, unknown>>(
+    const client = await getClient(req);
+    const updatedContainer = await client.set<Record<string, unknown>>(
       CONTAINER_PATH,
       id,
       updateData
@@ -195,11 +206,12 @@ export async function startContainer(req: Request, res: Response): Promise<void>
       return;
     }
 
+    const client = await getClient(req);
     // RouterOS 使用 /container/start 命令启动容器
-    await routerosClient.execute(`${CONTAINER_PATH}/start`, [`=.id=${id}`]);
+    await client.execute(`${CONTAINER_PATH}/start`, [`=.id=${id}`]);
     
     // 获取更新后的容器状态
-    const updatedContainer = await routerosClient.getById<Record<string, unknown>>(CONTAINER_PATH, id);
+    const updatedContainer = await client.getById<Record<string, unknown>>(CONTAINER_PATH, id);
     
     logger.info(`Started container: ${id}`);
     
@@ -233,11 +245,12 @@ export async function stopContainer(req: Request, res: Response): Promise<void> 
       return;
     }
 
+    const client = await getClient(req);
     // RouterOS 使用 /container/stop 命令停止容器
-    await routerosClient.execute(`${CONTAINER_PATH}/stop`, [`=.id=${id}`]);
+    await client.execute(`${CONTAINER_PATH}/stop`, [`=.id=${id}`]);
     
     // 获取更新后的容器状态
-    const updatedContainer = await routerosClient.getById<Record<string, unknown>>(CONTAINER_PATH, id);
+    const updatedContainer = await client.getById<Record<string, unknown>>(CONTAINER_PATH, id);
     
     logger.info(`Stopped container: ${id}`);
     
@@ -262,12 +275,13 @@ export async function stopContainer(req: Request, res: Response): Promise<void> 
  * 获取所有挂载点
  * GET /api/container/mounts
  */
-export async function getAllMounts(_req: Request, res: Response): Promise<void> {
+export async function getAllMounts(req: Request, res: Response): Promise<void> {
   try {
-    const mounts = await routerosClient.print<Record<string, unknown>>(CONTAINER_MOUNTS_PATH);
+    const client = await getClient(req);
+    const mounts = await client.print<Record<string, unknown>>(CONTAINER_MOUNTS_PATH);
     const data = Array.isArray(mounts) ? mounts : [];
     
-    logger.info(`Returning ${data.length} container mounts`);
+    // logger.info(`Returning ${data.length} container mounts`);
     
     res.json({
       success: true,
@@ -307,7 +321,8 @@ export async function updateMount(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const updatedMount = await routerosClient.set<Record<string, unknown>>(
+    const client = await getClient(req);
+    const updatedMount = await client.set<Record<string, unknown>>(
       CONTAINER_MOUNTS_PATH,
       id,
       updateData
@@ -345,7 +360,8 @@ export async function deleteMount(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await routerosClient.remove(CONTAINER_MOUNTS_PATH, id);
+    const client = await getClient(req);
+    await client.remove(CONTAINER_MOUNTS_PATH, id);
     
     logger.info(`Deleted container mount: ${id}`);
     
@@ -368,12 +384,13 @@ export async function deleteMount(req: Request, res: Response): Promise<void> {
  * 获取所有环境变量
  * GET /api/container/envs
  */
-export async function getAllEnvs(_req: Request, res: Response): Promise<void> {
+export async function getAllEnvs(req: Request, res: Response): Promise<void> {
   try {
-    const envs = await routerosClient.print<Record<string, unknown>>(CONTAINER_ENVS_PATH);
+    const client = await getClient(req);
+    const envs = await client.print<Record<string, unknown>>(CONTAINER_ENVS_PATH);
     const data = Array.isArray(envs) ? envs : [];
     
-    logger.info(`Returning ${data.length} container envs`);
+    // logger.info(`Returning ${data.length} container envs`);
     
     res.json({
       success: true,
@@ -413,7 +430,8 @@ export async function updateEnv(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const updatedEnv = await routerosClient.set<Record<string, unknown>>(
+    const client = await getClient(req);
+    const updatedEnv = await client.set<Record<string, unknown>>(
       CONTAINER_ENVS_PATH,
       id,
       updateData
@@ -451,7 +469,8 @@ export async function deleteEnv(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await routerosClient.remove(CONTAINER_ENVS_PATH, id);
+    const client = await getClient(req);
+    await client.remove(CONTAINER_ENVS_PATH, id);
     
     logger.info(`Deleted container env: ${id}`);
     

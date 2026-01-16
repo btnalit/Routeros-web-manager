@@ -4,12 +4,19 @@
  */
 
 import { Request, Response } from 'express';
-import { routerosClient } from '../services/routerosClient';
+import { connectionPool } from '../services/connectionPool';
+import { deviceService } from '../services/deviceService';
 import { Scheduler, Script } from '../types';
 import { logger } from '../utils/logger';
 
 const SCHEDULER_PATH = '/system/scheduler';
 const SCRIPT_PATH = '/system/script';
+
+async function getClient(req: Request) {
+  const deviceId = (req.query.deviceId as string) || (await deviceService.getAllDevices())[0]?.id;
+  if (!deviceId) throw new Error('Device ID is required');
+  return await connectionPool.getClient(deviceId);
+}
 
 // ==================== Scheduler 相关 ====================
 
@@ -17,9 +24,10 @@ const SCRIPT_PATH = '/system/script';
  * 获取所有计划任务
  * GET /api/system/scheduler
  */
-export async function getAllSchedulers(_req: Request, res: Response): Promise<void> {
+export async function getAllSchedulers(req: Request, res: Response): Promise<void> {
   try {
-    const schedulers = await routerosClient.print<Scheduler>(SCHEDULER_PATH);
+    const client = await getClient(req);
+    const schedulers = await client.print<Scheduler>(SCHEDULER_PATH);
     
     res.json({
       success: true,
@@ -50,7 +58,8 @@ export async function getSchedulerById(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const scheduler = await routerosClient.getById<Scheduler>(SCHEDULER_PATH, id);
+    const client = await getClient(req);
+    const scheduler = await client.getById<Scheduler>(SCHEDULER_PATH, id);
     
     if (!scheduler) {
       res.status(404).json({
@@ -128,7 +137,8 @@ export async function addScheduler(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const newScheduler = await routerosClient.add<Scheduler>(SCHEDULER_PATH, schedulerData);
+    const client = await getClient(req);
+    const newScheduler = await client.add<Scheduler>(SCHEDULER_PATH, schedulerData);
     
     res.status(201).json({
       success: true,
@@ -178,7 +188,8 @@ export async function updateScheduler(req: Request, res: Response): Promise<void
       return;
     }
 
-    const updatedScheduler = await routerosClient.set<Scheduler>(
+    const client = await getClient(req);
+    const updatedScheduler = await client.set<Scheduler>(
       SCHEDULER_PATH,
       id,
       updateData
@@ -214,7 +225,8 @@ export async function deleteScheduler(req: Request, res: Response): Promise<void
       return;
     }
 
-    await routerosClient.remove(SCHEDULER_PATH, id);
+    const client = await getClient(req);
+    await client.remove(SCHEDULER_PATH, id);
     
     res.json({
       success: true,
@@ -245,8 +257,9 @@ export async function enableScheduler(req: Request, res: Response): Promise<void
       return;
     }
 
-    await routerosClient.enable(SCHEDULER_PATH, id);
-    const updatedScheduler = await routerosClient.getById<Scheduler>(SCHEDULER_PATH, id);
+    const client = await getClient(req);
+    await client.enable(SCHEDULER_PATH, id);
+    const updatedScheduler = await client.getById<Scheduler>(SCHEDULER_PATH, id);
     
     res.json({
       success: true,
@@ -278,8 +291,9 @@ export async function disableScheduler(req: Request, res: Response): Promise<voi
       return;
     }
 
-    await routerosClient.disable(SCHEDULER_PATH, id);
-    const updatedScheduler = await routerosClient.getById<Scheduler>(SCHEDULER_PATH, id);
+    const client = await getClient(req);
+    await client.disable(SCHEDULER_PATH, id);
+    const updatedScheduler = await client.getById<Scheduler>(SCHEDULER_PATH, id);
     
     res.json({
       success: true,
@@ -302,9 +316,10 @@ export async function disableScheduler(req: Request, res: Response): Promise<voi
  * 获取所有脚本
  * GET /api/system/scripts
  */
-export async function getAllScripts(_req: Request, res: Response): Promise<void> {
+export async function getAllScripts(req: Request, res: Response): Promise<void> {
   try {
-    const scripts = await routerosClient.print<Script>(SCRIPT_PATH);
+    const client = await getClient(req);
+    const scripts = await client.print<Script>(SCRIPT_PATH);
     
     res.json({
       success: true,
@@ -335,7 +350,8 @@ export async function getScriptById(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const script = await routerosClient.getById<Script>(SCRIPT_PATH, id);
+    const client = await getClient(req);
+    const script = await client.getById<Script>(SCRIPT_PATH, id);
     
     if (!script) {
       res.status(404).json({
@@ -383,7 +399,8 @@ export async function addScript(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const newScript = await routerosClient.add<Script>(SCRIPT_PATH, scriptData);
+    const client = await getClient(req);
+    const newScript = await client.add<Script>(SCRIPT_PATH, scriptData);
     
     res.status(201).json({
       success: true,
@@ -424,7 +441,8 @@ export async function updateScript(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const updatedScript = await routerosClient.set<Script>(
+    const client = await getClient(req);
+    const updatedScript = await client.set<Script>(
       SCRIPT_PATH,
       id,
       updateData
@@ -460,7 +478,8 @@ export async function deleteScript(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await routerosClient.remove(SCRIPT_PATH, id);
+    const client = await getClient(req);
+    await client.remove(SCRIPT_PATH, id);
     
     res.json({
       success: true,
@@ -491,7 +510,8 @@ export async function runScript(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    await routerosClient.runScript(id);
+    const client = await getClient(req);
+    await client.runScript(id);
     
     res.json({
       success: true,
@@ -513,10 +533,11 @@ export async function runScript(req: Request, res: Response): Promise<void> {
  * 重启系统
  * POST /api/system/reboot
  */
-export async function rebootSystem(_req: Request, res: Response): Promise<void> {
+export async function rebootSystem(req: Request, res: Response): Promise<void> {
   try {
     logger.warn('System reboot requested');
-    await routerosClient.execute('/system/reboot');
+    const client = await getClient(req);
+    await client.execute('/system/reboot');
     
     res.json({
       success: true,
@@ -535,10 +556,11 @@ export async function rebootSystem(_req: Request, res: Response): Promise<void> 
  * 关闭系统
  * POST /api/system/shutdown
  */
-export async function shutdownSystem(_req: Request, res: Response): Promise<void> {
+export async function shutdownSystem(req: Request, res: Response): Promise<void> {
   try {
     logger.warn('System shutdown requested');
-    await routerosClient.execute('/system/shutdown');
+    const client = await getClient(req);
+    await client.execute('/system/shutdown');
     
     res.json({
       success: true,

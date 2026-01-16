@@ -8,7 +8,7 @@
  * - 5.3: 巡检发现问题时产生相应的告警事件
  */
 
-import { ScheduledTask, AlertSeverity } from '../../types/ai-ops';
+import { ScheduledTask, AlertSeverity, SystemMetrics, InterfaceMetrics } from '../../types/ai-ops';
 import { logger } from '../../utils/logger';
 import { metricsCollector } from './metricsCollector';
 import { alertEngine } from './alertEngine';
@@ -174,10 +174,14 @@ export async function executeInspection(task: ScheduledTask): Promise<Inspection
 /**
  * 采集系统状态
  */
-async function collectSystemStatus() {
+async function collectSystemStatus(): Promise<{ system: SystemMetrics; interfaces: InterfaceMetrics[] }> {
   try {
     // 尝试立即采集最新数据
-    return await metricsCollector.collectNow();
+    const metrics = await metricsCollector.collectNow();
+    if (metrics) return metrics;
+
+    // 如果返回 null，抛出错误
+    throw new Error('Metrics collection returned null');
   } catch (error) {
     logger.warn('Failed to collect fresh metrics, trying cached data:', error);
     
@@ -196,7 +200,7 @@ async function collectSystemStatus() {
  * 分析问题
  */
 export function analyzeIssues(
-  metrics: { system: { cpu: { usage: number }; memory: { usage: number }; disk: { usage: number }; uptime: number }; interfaces: Array<{ name: string; status: 'up' | 'down'; rxBytes: number; txBytes: number; rxPackets: number; txPackets: number; rxErrors: number; txErrors: number }> },
+  metrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] },
   config: {
     cpuWarningThreshold: number;
     cpuCriticalThreshold: number;
@@ -293,10 +297,15 @@ export function analyzeIssues(
  * 通过告警引擎评估当前指标，触发相应的告警
  */
 async function triggerInspectionAlerts(
-  metrics: { system: { cpu: { usage: number }; memory: { total: number; used: number; free: number; usage: number }; disk: { total: number; used: number; free: number; usage: number }; uptime: number }; interfaces: Array<{ name: string; status: 'up' | 'down'; rxBytes: number; txBytes: number; rxPackets: number; txPackets: number; rxErrors: number; txErrors: number }> }
+  metrics: { system: SystemMetrics; interfaces: InterfaceMetrics[] }
 ): Promise<void> {
   try {
     // 使用告警引擎评估当前指标
+    // TODO: Support multi-device context. Currently using default/first device implicitly in AlertEngine if not provided.
+    // However, AlertEngine.evaluate now takes (metrics, deviceId).
+    // InspectionHandler runs globally (scheduled task).
+    // We should ideally iterate devices or the inspection task should specify a device.
+    // For now, we assume global or first device context.
     const triggeredAlerts = await alertEngine.evaluate(metrics);
     
     if (triggeredAlerts.length > 0) {

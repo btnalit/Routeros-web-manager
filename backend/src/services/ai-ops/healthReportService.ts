@@ -179,10 +179,11 @@ export class HealthReportService implements IHealthReportService {
 
     try {
       // 获取系统指标历史数据
+      // TODO: Support multi-device reporting. Currently aggregates default device.
       const systemHistory = await metricsCollector.getSystemMetricsHistory(from, to);
       
-      logger.info(`Aggregating system metrics from ${new Date(from).toISOString()} to ${new Date(to).toISOString()}`);
-      logger.info(`Found ${systemHistory.length} metric records in time range`);
+      // logger.info(`Aggregating system metrics from ${new Date(from).toISOString()} to ${new Date(to).toISOString()}`);
+      // logger.info(`Found ${systemHistory.length} metric records in time range`);
 
       for (const entry of systemHistory) {
         cpuValues.push(entry.metrics.cpu.usage);
@@ -191,8 +192,8 @@ export class HealthReportService implements IHealthReportService {
       }
       
       if (systemHistory.length > 0) {
-        logger.info(`Sample metrics - CPU: ${cpuValues[0]}%, Memory: ${memoryValues[0]}%, Disk: ${diskValues[0]}%`);
-        logger.info(`Aggregated values - CPU count: ${cpuValues.length}, Memory count: ${memoryValues.length}, Disk count: ${diskValues.length}`);
+        // logger.info(`Sample metrics - CPU: ${cpuValues[0]}%, Memory: ${memoryValues[0]}%, Disk: ${diskValues[0]}%`);
+        // logger.info(`Aggregated values - CPU count: ${cpuValues.length}, Memory count: ${memoryValues.length}, Disk count: ${diskValues.length}`);
       } else {
         logger.warn(`No metrics data found in time range ${new Date(from).toISOString()} to ${new Date(to).toISOString()}`);
       }
@@ -206,7 +207,7 @@ export class HealthReportService implements IHealthReportService {
       disk: this.calculateMetricStats(diskValues),
     };
     
-    logger.info(`Final aggregated metrics - CPU: avg=${result.cpu.avg}, Memory: avg=${result.memory.avg}, Disk: avg=${result.disk.avg}`);
+    // logger.info(`Final aggregated metrics - CPU: avg=${result.cpu.avg}, Memory: avg=${result.memory.avg}, Disk: avg=${result.disk.avg}`);
     
     return result;
   }
